@@ -1,24 +1,22 @@
 
 'use client';
 
-import { useState, useEffect, useMemo, type ReactNode } from 'react';
+import { useState, useEffect, type ReactNode } from 'react';
 import { usePathname } from 'next/navigation';
 import { Header } from '@/components/Header';
-import { AttendanceProvider, useAttendance, type AttendanceRecord } from '@/context/AttendanceContext';
-import AdminLoginPage from './page'; 
+import { AttendanceProvider, useAttendance } from '@/context/AttendanceContext';
+import AdminLoginPage from './page';
 import Loading from '../loading';
+import AdminDashboard from './dashboard/page';
 
 function AdminDashboardLayout({ children }: { children: ReactNode }) {
   const { records } = useAttendance();
-  const memoizedRecords = useMemo(() => records, [records]);
 
   return (
     <div className="flex min-h-screen w-full flex-col">
       <Header title="Admin Portal" />
       <main className="flex flex-1 flex-col items-center justify-center p-4">
-        {children && (children as React.ReactElement).type.name === 'AdminDashboard'
-          ? <AdminDashboard records={memoizedRecords} />
-          : children}
+        <AdminDashboard records={records} />
       </main>
     </div>
   );
@@ -44,16 +42,19 @@ function AdminContent() {
   };
 
   if (!isAuthenticated) {
-    return <AdminLoginPage onLoginSuccess={handleLoginSuccess} />;
+    return (
+      <div className="flex min-h-screen w-full flex-col">
+        <Header title="Admin Portal" />
+        <main className="flex flex-1 flex-col items-center justify-center p-4">
+          <AdminLoginPage onLoginSuccess={handleLoginSuccess} />
+        </main>
+      </div>
+    );
   }
-
-  // This is a placeholder for the actual dashboard content passed as children
-  // It will be replaced by the actual page content by Next.js router
-  const DashboardComponent = require('./dashboard/page').default;
 
   return (
     <AdminDashboardLayout>
-       <DashboardComponent records={[]} />
+       <AdminDashboard records={[]} />
     </AdminDashboardLayout>
   );
 }

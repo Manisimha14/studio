@@ -24,7 +24,7 @@ export default function AdminLoginPage({ onLoginSuccess }: { onLoginSuccess: () 
 
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
-    if (password === "password") {
+    if (password === "manisimha") {
       toast({
         title: "Success",
         description: "Logged in successfully.",
@@ -64,7 +64,7 @@ export default function AdminLoginPage({ onLoginSuccess }: { onLoginSuccess: () 
               placeholder="Enter password"
             />
              <p className="text-xs text-muted-foreground">
-              Hint: The password is 'password'.
+              Hint: The password is 'manisimha'.
             </p>
           </div>
         </CardContent>
