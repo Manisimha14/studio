@@ -70,7 +70,7 @@ export default function AdminDashboard() {
                   <TableHead>Student</TableHead>
                   <TableHead>Floor</TableHead>
                   <TableHead>Timestamp</TableHead>
-                  <TableHead>Location (Lat, Long)</TableHead>
+                  <TableHead>Location</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -96,8 +96,11 @@ export default function AdminDashboard() {
                       <TableCell>{record.floorNumber}</TableCell>
                       <TableCell>{record.timestamp}</TableCell>
                       <TableCell>
-                        {record.location.latitude.toFixed(4)},{" "}
-                        {record.location.longitude.toFixed(4)}
+                        <div className="font-medium">{record.placeName}</div>
+                        <div className="text-xs text-muted-foreground">
+                          {record.location.latitude.toFixed(4)},{" "}
+                          {record.location.longitude.toFixed(4)}
+                        </div>
                       </TableCell>
                     </TableRow>
                   ))

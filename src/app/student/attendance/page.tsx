@@ -31,6 +31,7 @@ import {
   Building,
   AlertTriangle,
 } from "lucide-react";
+import { reverseGeocode } from "@/ai/flows/reverse-geocode-flow";
 
 export default function AttendancePage() {
   const { addRecord } = useAttendance();
@@ -41,6 +42,7 @@ export default function AttendancePage() {
     latitude: number;
     longitude: number;
   } | null>(null);
+   const [placeName, setPlaceName] = useState<string | null>(null);
   const [locationError, setLocationError] = useState<string | null>(null);
   const [isMarked, setIsMarked] = useState(false);
   const [hasCameraPermission, setHasCameraPermission] = useState(true);
@@ -70,12 +72,20 @@ export default function AttendancePage() {
         return;
       }
       navigator.geolocation.getCurrentPosition(
-        (position) => {
-          setLocation({
+        async (position) => {
+          const coords = {
             latitude: position.coords.latitude,
             longitude: position.coords.longitude,
-          });
+          };
+          setLocation(coords);
           setLocationError(null);
+           try {
+            const { placeName } = await reverseGeocode(coords);
+            setPlaceName(placeName);
+          } catch (error) {
+            console.error("Reverse geocoding failed:", error);
+            setPlaceName("Unknown Location");
+          }
         },
         () => {
           setLocationError("Unable to retrieve your location. Please enable location services.");
@@ -148,6 +158,15 @@ export default function AttendancePage() {
       });
       return;
     }
+    
+    if (!placeName) {
+      toast({
+        variant: 'destructive',
+        title: 'Location Error',
+        description: 'Could not determine the place name. Please try again.',
+      });
+      return;
+    }
 
     if (!snapshot) {
       toast({
@@ -173,6 +192,7 @@ export default function AttendancePage() {
       floorNumber,
       timestamp: new Date().toLocaleString(),
       location,
+      placeName,
       photo: snapshot,
     };
 
@@ -285,7 +305,7 @@ export default function AttendancePage() {
              {location && !locationError && (
                  <Alert>
                     <MapPin className="h-4 w-4" />
-                    <AlertTitle>Location Acquired</AlertTitle>
+                    <AlertTitle>{placeName || 'Acquiring location...'}</AlertTitle>
                     <AlertDescription>
                         Lat: {location.latitude.toFixed(4)}, Long:{" "}
                         {location.longitude.toFixed(4)}
@@ -303,7 +323,7 @@ export default function AttendancePage() {
         <CardFooter>
           <Button
             onClick={handleMarkAttendance}
-            disabled={isLoading || !location || !snapshot || isMarked}
+            disabled={isLoading || !location || !snapshot || isMarked || !placeName}
             className="w-full py-6 text-lg font-bold"
           >
             {isLoading ? (
