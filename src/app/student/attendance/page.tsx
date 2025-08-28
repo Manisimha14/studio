@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -33,6 +34,7 @@ import {
 export default function AttendancePage() {
   const { addRecord } = useAttendance();
   const { toast } = useToast();
+  const router = useRouter();
   const [isLoading, setIsLoading] = useState(false);
   const [location, setLocation] = useState<{
     latitude: number;
@@ -171,8 +173,9 @@ export default function AttendancePage() {
       setIsMarked(true);
       toast({
         title: "Success!",
-        description: "Your attendance has been marked successfully.",
+        description: "Thank you for marking the attendance.",
       });
+      router.push("/");
     }, 1500);
   };
 
