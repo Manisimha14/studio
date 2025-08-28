@@ -93,7 +93,8 @@ export default function AttendancePage() {
         },
         () => {
           setLocationError("Unable to retrieve your location. Please enable location services.");
-        }
+        },
+        { enableHighAccuracy: true } // Request high accuracy
       );
     };
 

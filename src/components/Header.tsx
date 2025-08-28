@@ -8,10 +8,18 @@ import { Button } from '@/components/ui/button';
 export function Header({ title }: { title: string }) {
   const router = useRouter();
 
+  const handleBack = () => {
+    if (window.history.length > 1) {
+      router.back();
+    } else {
+      router.push('/');
+    }
+  };
+
   return (
     <header className="sticky top-0 z-10 flex h-16 items-center justify-between border-b bg-card px-4 sm:px-6">
       <div className="flex items-center gap-4">
-        <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => router.back()}>
+        <Button variant="outline" size="icon" className="h-8 w-8" onClick={handleBack}>
           <ArrowLeft className="h-4 w-4" />
           <span className="sr-only">Back</span>
         </Button>
