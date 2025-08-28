@@ -19,9 +19,7 @@ import {
   Camera,
   CheckCircle,
   VideoOff,
-  AlertTriangle,
 } from "lucide-react";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
 export default function AttendancePage() {
   const { addRecord } = useAttendance();
