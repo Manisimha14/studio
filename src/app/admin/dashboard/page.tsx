@@ -20,14 +20,24 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Users, ArrowLeft, ArrowRight } from "lucide-react";
 import Image from "next/image";
-import { useState } from "react";
-import { useAttendance } from "@/context/AttendanceContext";
+import { useState, useEffect } from "react";
+import { AttendanceRecord } from "@/context/AttendanceContext";
 
 const RECORDS_PER_PAGE = 5;
 
-export default function AdminDashboard() {
-  const { records } = useAttendance();
+export default function AdminDashboard({
+  records: initialRecords,
+}: {
+  records: AttendanceRecord[];
+}) {
+  const [records, setRecords] = useState(initialRecords);
   const [currentPage, setCurrentPage] = useState(1);
+
+  useEffect(() => {
+    setRecords(initialRecords);
+  }, [initialRecords]);
+
+
   const totalPages = Math.ceil(records.length / RECORDS_PER_PAGE);
   const startIndex = (currentPage - 1) * RECORDS_PER_PAGE;
   const endIndex = startIndex + RECORDS_PER_PAGE;

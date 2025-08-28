@@ -17,7 +17,7 @@ import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { Shield } from "lucide-react";
 
-export default function AdminLoginPage() {
+export default function AdminLoginPage({ onLoginSuccess }: { onLoginSuccess: () => void }) {
   const [password, setPassword] = useState("");
   const { toast } = useToast();
   const router = useRouter();
@@ -29,7 +29,7 @@ export default function AdminLoginPage() {
         title: "Success",
         description: "Logged in successfully.",
       });
-      // Redirect to dashboard on success
+      onLoginSuccess();
       router.push("/admin/dashboard");
     } else {
       toast({

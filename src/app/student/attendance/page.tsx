@@ -38,6 +38,7 @@ export default function AttendancePage() {
   const { toast } = useToast();
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(false);
+  const [isGeocoding, setIsGeocoding] = useState(false);
   const [location, setLocation] = useState<{
     latitude: number;
     longitude: number;
@@ -79,13 +80,15 @@ export default function AttendancePage() {
           };
           setLocation(coords);
           setLocationError(null);
-
+          setIsGeocoding(true);
            try {
             const { placeName } = await reverseGeocode(coords);
             setPlaceName(placeName);
           } catch (error) {
             console.error("Reverse geocoding failed:", error);
             setPlaceName("Unknown Location");
+          } finally {
+            setIsGeocoding(false);
           }
         },
         () => {
@@ -119,7 +122,9 @@ export default function AttendancePage() {
 
         // Stop the camera stream after taking a snapshot
         const stream = video.srcObject as MediaStream;
-        stream.getTracks().forEach(track => track.stop());
+        if(stream) {
+          stream.getTracks().forEach(track => track.stop());
+        }
       }
     }
   };
@@ -306,7 +311,7 @@ export default function AttendancePage() {
              {location && !locationError && (
                  <Alert>
                     <MapPin className="h-4 w-4" />
-                    <AlertTitle>{placeName || 'Acquiring location...'}</AlertTitle>
+                    <AlertTitle>{isGeocoding ? 'Acquiring location name...' : placeName || 'Location name not found'}</AlertTitle>
                     <AlertDescription>
                         Lat: {location.latitude.toFixed(4)}, Long: {location.longitude.toFixed(4)}
                     </AlertDescription>
@@ -323,7 +328,7 @@ export default function AttendancePage() {
         <CardFooter>
           <Button
             onClick={handleMarkAttendance}
-            disabled={isLoading || !location || !snapshot || isMarked || !placeName}
+            disabled={isLoading || !location || !snapshot || isMarked || !placeName || isGeocoding}
             className="w-full py-6 text-lg font-bold"
           >
             {isLoading ? (

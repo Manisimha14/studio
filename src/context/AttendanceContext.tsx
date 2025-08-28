@@ -1,10 +1,11 @@
+
 "use client";
 
 import type { ReactNode } from "react";
 import { createContext, useContext, useState, useEffect } from "react";
 
 export interface AttendanceRecord {
-  id: string;
+  id: number;
   studentName: string;
   timestamp: string;
   location: {
@@ -58,7 +59,7 @@ export function AttendanceProvider({ children }: { children: ReactNode }) {
   const addRecord = (record: Omit<AttendanceRecord, "id">) => {
     const newRecord = {
       ...record,
-      id: new Date().toISOString() + Math.random(),
+      id: new Date().getTime(),
     };
     
     setRecords((prevRecords) => {
