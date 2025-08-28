@@ -63,15 +63,6 @@ export default function AttendancePage() {
 
     getCameraPermission();
 
-    return () => {
-      if (videoRef.current && videoRef.current.srcObject) {
-        const stream = videoRef.current.srcObject as MediaStream;
-        stream.getTracks().forEach((track) => track.stop());
-      }
-    };
-  }, [toast]);
-
-  useEffect(() => {
     if (!navigator.geolocation) {
       setLocationError("Geolocation is not supported by your browser.");
       return;
@@ -92,8 +83,14 @@ export default function AttendancePage() {
       }
     );
 
-    return () => navigator.geolocation.clearWatch(watchId);
-  }, []);
+    return () => {
+      if (videoRef.current && videoRef.current.srcObject) {
+        const stream = videoRef.current.srcObject as MediaStream;
+        stream.getTracks().forEach((track) => track.stop());
+      }
+      navigator.geolocation.clearWatch(watchId);
+    };
+  }, [toast]);
 
   const handleCapture = () => {
     if (videoRef.current && canvasRef.current) {
