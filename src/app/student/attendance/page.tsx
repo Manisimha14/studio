@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -15,14 +15,19 @@ import { Label } from "@/components/ui/label";
 import { useAttendance } from "@/context/AttendanceContext";
 import { useToast } from "@/hooks/use-toast";
 import {
+  Alert,
+  AlertTitle,
+  AlertDescription,
+} from "@/components/ui/alert";
+import {
   Loader2,
   MapPin,
-  Clock,
   Camera,
   CheckCircle,
   VideoOff,
   User,
   Building,
+  AlertTriangle,
 } from "lucide-react";
 
 export default function AttendancePage() {
@@ -35,57 +40,48 @@ export default function AttendancePage() {
   } | null>(null);
   const [locationError, setLocationError] = useState<string | null>(null);
   const [isMarked, setIsMarked] = useState(false);
-  const [hasCameraPermission, setHasCameraPermission] = useState<
-    boolean | undefined
-  >(undefined);
+  const [hasCameraPermission, setHasCameraPermission] = useState(true);
   const [snapshot, setSnapshot] = useState<string | null>(null);
   const [studentName, setStudentName] = useState("");
   const [floorNumber, setFloorNumber] = useState("");
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
-  const enableCamera = async () => {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: true,
-      });
-      setHasCameraPermission(true);
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
+  useEffect(() => {
+    const requestPermissions = async () => {
+      // Request camera permission
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+        setHasCameraPermission(true);
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+        }
+      } catch (error) {
+        console.error("Error accessing camera:", error);
+        setHasCameraPermission(false);
       }
-    } catch (error) {
-      console.error("Error accessing camera:", error);
-      setHasCameraPermission(false);
-      toast({
-        variant: "destructive",
-        title: "Camera Access Denied",
-        description:
-          "Please enable camera permissions in your browser settings to use this app.",
-      });
-    }
-  };
 
-  const getLocation = () => {
-    if (!navigator.geolocation) {
-      setLocationError("Geolocation is not supported by your browser.");
-      return;
-    }
-
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        setLocation({
-          latitude: position.coords.latitude,
-          longitude: position.coords.longitude,
-        });
-        setLocationError(null);
-      },
-      () => {
-        setLocationError(
-          "Unable to retrieve your location. Please enable location services."
-        );
+      // Request location permission
+      if (!navigator.geolocation) {
+        setLocationError("Geolocation is not supported by your browser.");
+        return;
       }
-    );
-  };
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          setLocation({
+            latitude: position.coords.latitude,
+            longitude: position.coords.longitude,
+          });
+          setLocationError(null);
+        },
+        () => {
+          setLocationError("Unable to retrieve your location. Please enable location services.");
+        }
+      );
+    };
+
+    requestPermissions();
+  }, []);
 
   const handleCapture = () => {
     if (videoRef.current && canvasRef.current) {
@@ -98,9 +94,30 @@ export default function AttendancePage() {
         context.drawImage(video, 0, 0, video.videoWidth, video.videoHeight);
         const dataUrl = canvas.toDataURL("image/png");
         setSnapshot(dataUrl);
+
+        // Stop the camera stream after taking a snapshot
+        const stream = video.srcObject as MediaStream;
+        stream.getTracks().forEach(track => track.stop());
       }
     }
   };
+
+  const handleRetake = () => {
+    setSnapshot(null);
+    const getCameraPermission = async () => {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+        }
+      } catch (error) {
+        console.error("Error accessing camera:", error);
+        setHasCameraPermission(false);
+      }
+    };
+    getCameraPermission();
+  };
+
 
   const handleMarkAttendance = () => {
     if (!studentName || !floorNumber) {
@@ -116,8 +133,7 @@ export default function AttendancePage() {
       toast({
         variant: "destructive",
         title: "Location Error",
-        description:
-          "Could not get your location. Please ensure it's enabled and try again.",
+        description: "Could not get your location. Please ensure it's enabled and try again.",
       });
       return;
     }
@@ -161,60 +177,60 @@ export default function AttendancePage() {
   };
 
   return (
-    <div className="flex items-start justify-center pt-10">
+    <div className="flex items-start justify-center py-8">
       <Card className="w-full max-w-lg shadow-lg">
         <CardHeader>
-          <CardTitle className="text-2xl">Mark Your Attendance</CardTitle>
+          <CardTitle className="text-3xl font-bold">Mark Your Attendance</CardTitle>
           <CardDescription>
-            Your name, floor, a snapshot and your location are required to mark attendance.
+            Complete the steps below to record your attendance.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
-           <div className="space-y-4">
+           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             <div className="space-y-2">
-              <Label htmlFor="studentName" className="flex items-center gap-2">
-                <User /> Student Name
+              <Label htmlFor="studentName" className="flex items-center gap-2 font-semibold">
+                <User className="text-primary" /> Full Name
               </Label>
               <Input
                 id="studentName"
                 value={studentName}
                 onChange={(e) => setStudentName(e.target.value)}
-                placeholder="Enter your full name"
+                placeholder="e.g., Jane Doe"
+                disabled={isMarked}
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="floorNumber" className="flex items-center gap-2">
-                <Building /> Floor Number
+              <Label htmlFor="floorNumber" className="flex items-center gap-2 font-semibold">
+                <Building className="text-primary" /> Floor Number
               </Label>
               <Input
                 id="floorNumber"
                 value={floorNumber}
                 onChange={(e) => setFloorNumber(e.target.value)}
                 placeholder="e.g., 4th Floor"
+                disabled={isMarked}
               />
             </div>
           </div>
 
-          {!hasCameraPermission && (
-            <Button onClick={enableCamera} className="w-full">
-              <Camera className="mr-2" /> Enable Camera
-            </Button>
-          )}
-
           <div className="space-y-4">
-            <div className="relative aspect-video w-full overflow-hidden rounded-lg border bg-muted">
+             <Label className="flex items-center gap-2 font-semibold">
+                <Camera className="text-primary" /> Snapshot
+              </Label>
+            <div className="relative aspect-video w-full overflow-hidden rounded-lg border-2 border-dashed bg-muted">
               <video
                 ref={videoRef}
-                className="h-full w-full object-cover"
+                className={`h-full w-full object-cover ${snapshot ? 'hidden' : ''}`}
                 autoPlay
                 muted
                 playsInline
               />
               <canvas ref={canvasRef} className="hidden" />
-              {hasCameraPermission === false && (
-                <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-center text-destructive">
+              {!hasCameraPermission && (
+                <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-center text-destructive p-4">
                   <VideoOff className="h-10 w-10" />
                   <p className="font-semibold">Camera Access Denied</p>
+                   <p className="text-sm">Please allow camera access in your browser settings.</p>
                 </div>
               )}
 
@@ -230,14 +246,14 @@ export default function AttendancePage() {
               <div className="flex gap-2">
                 <Button
                   onClick={handleCapture}
-                  disabled={!!snapshot}
+                  disabled={!!snapshot || isMarked}
                   className="flex-1"
                 >
                   <Camera className="mr-2" />
                   {snapshot ? "Snapshot Taken" : "Take Snapshot"}
                 </Button>
                 {snapshot && (
-                  <Button onClick={() => setSnapshot(null)} variant="outline">
+                  <Button onClick={handleRetake} variant="outline"  disabled={isMarked}>
                     Retake
                   </Button>
                 )}
@@ -245,43 +261,40 @@ export default function AttendancePage() {
             )}
           </div>
 
-          <div className="flex items-center gap-4 rounded-lg bg-muted p-4">
-            <Clock className="h-6 w-6 text-muted-foreground" />
-            <span className="text-muted-foreground">
-              Timestamp will be recorded automatically
-            </span>
-          </div>
-          <Button onClick={getLocation} variant="outline" className="w-full">
-            <MapPin className="mr-2" /> Get Location
-          </Button>
-
-          <div className="flex items-start gap-4 rounded-lg border p-4">
-            <MapPin className="mt-1 h-6 w-6 text-primary" />
-            <div>
-              <h4 className="font-semibold">Live Location</h4>
-              {locationError && (
-                <p className="text-sm text-destructive">{locationError}</p>
+          <div className="space-y-4">
+            <Label className="flex items-center gap-2 font-semibold">
+                <MapPin className="text-primary" /> Live Location
+              </Label>
+            {locationError && (
+                 <Alert variant="destructive">
+                    <AlertTriangle className="h-4 w-4" />
+                    <AlertTitle>Location Error</AlertTitle>
+                    <AlertDescription>{locationError}</AlertDescription>
+                  </Alert>
               )}
-              {location && !locationError && (
-                <p className="text-sm text-muted-foreground">
-                  Lat: {location.latitude.toFixed(4)}, Long:{" "}
-                  {location.longitude.toFixed(4)}
-                </p>
+             {location && !locationError && (
+                 <Alert>
+                    <MapPin className="h-4 w-4" />
+                    <AlertTitle>Location Acquired</AlertTitle>
+                    <AlertDescription>
+                        Lat: {location.latitude.toFixed(4)}, Long:{" "}
+                        {location.longitude.toFixed(4)}
+                    </AlertDescription>
+                  </Alert>
+             )}
+             {!location && !locationError && (
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground p-4 justify-center">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    <span>Acquiring location...</span>
+                  </div>
               )}
-              {!location && !locationError && (
-                <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  <span>Acquiring location...</span>
-                </div>
-              )}
-            </div>
           </div>
         </CardContent>
         <CardFooter>
           <Button
             onClick={handleMarkAttendance}
             disabled={isLoading || !location || !snapshot || isMarked}
-            className="w-full py-6 text-lg"
+            className="w-full py-6 text-lg font-bold"
           >
             {isLoading ? (
               <Loader2 className="mr-2 h-5 w-5 animate-spin" />
@@ -292,7 +305,7 @@ export default function AttendancePage() {
               ? "Marking..."
               : isMarked
               ? "Attendance Marked"
-              : "Mark Attendance"}
+              : "Mark My Attendance"}
           </Button>
         </CardFooter>
       </Card>
