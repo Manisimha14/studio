@@ -11,13 +11,13 @@
 import { ai } from '@/ai/genkit';
 import { z } from 'zod';
 
-export const ReverseGeocodeInputSchema = z.object({
+const ReverseGeocodeInputSchema = z.object({
   latitude: z.number().describe('The latitude of the location.'),
   longitude: z.number().describe('The longitude of the location.'),
 });
 export type ReverseGeocodeInput = z.infer<typeof ReverseGeocodeInputSchema>;
 
-export const ReverseGeocodeOutputSchema = z.object({
+const ReverseGeocodeOutputSchema = z.object({
   placeName: z
     .string()
     .describe(
