@@ -106,7 +106,6 @@ export default function AdminDashboard({
                       <TableCell>{record.floorNumber}</TableCell>
                       <TableCell>{record.timestamp}</TableCell>
                       <TableCell>
-                        <div className="font-medium">{record.placeName}</div>
                         <div className="text-xs text-muted-foreground">
                           {record.location.latitude.toFixed(4)},{" "}
                           {record.location.longitude.toFixed(4)}

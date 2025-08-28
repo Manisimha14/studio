@@ -12,7 +12,6 @@ export interface AttendanceRecord {
     latitude: number;
     longitude: number;
   };
-  placeName: string;
   photo: string | null;
   floorNumber: string;
 }
