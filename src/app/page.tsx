@@ -6,14 +6,13 @@ import {
   CardTitle,
 } from '@/components/ui/card';
 import Link from 'next/link';
-import { User, Shield } from 'lucide-react';
-import { ScalerLogo } from '@/components/ScalerLogo';
+import { User, Shield, GraduationCap } from 'lucide-react';
 
 export default function Home() {
   return (
     <main className="flex min-h-screen flex-col items-center justify-center bg-background p-4">
       <div className="mb-10 flex items-center gap-3 text-center">
-        <ScalerLogo className="h-12 w-12 text-primary" />
+        <GraduationCap className="h-12 w-12 text-primary" />
         <div>
           <h1 className="text-5xl font-bold tracking-tight text-foreground">
             Smart Uniworld 1
