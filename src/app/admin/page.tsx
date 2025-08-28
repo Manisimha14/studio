@@ -63,9 +63,6 @@ export default function AdminLoginPage({ onLoginSuccess }: { onLoginSuccess: () 
               required
               placeholder="Enter password"
             />
-             <p className="text-xs text-muted-foreground">
-              Hint: The password is 'manisimha'.
-            </p>
           </div>
         </CardContent>
         <CardFooter>
