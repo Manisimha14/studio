@@ -18,10 +18,23 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Users, ArrowLeft, ArrowRight } from "lucide-react";
+import { Users, ArrowLeft, ArrowRight, Trash2 } from "lucide-react";
 import Image from "next/image";
 import { useState, useEffect } from "react";
-import { AttendanceRecord } from "@/context/AttendanceContext";
+import { AttendanceRecord, useAttendance } from "@/context/AttendanceContext";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
+import { useToast } from "@/hooks/use-toast";
+
 
 const RECORDS_PER_PAGE = 5;
 
@@ -30,12 +43,11 @@ export default function AdminDashboard({
 }: {
   records: AttendanceRecord[];
 }) {
-  const [records, setRecords] = useState(initialRecords);
+  const { records, removeRecord } = useAttendance();
   const [currentPage, setCurrentPage] = useState(1);
-
-  useEffect(() => {
-    setRecords(initialRecords);
-  }, [initialRecords]);
+  const { toast } = useToast();
+  
+  const [recordToDelete, setRecordToDelete] = useState<number | null>(null);
 
 
   const totalPages = Math.ceil(records.length / RECORDS_PER_PAGE);
@@ -54,6 +66,21 @@ export default function AdminDashboard({
       setCurrentPage(currentPage - 1);
     }
   };
+  
+  const handleDelete = () => {
+    if (recordToDelete !== null) {
+      removeRecord(recordToDelete);
+      toast({
+        title: "Record Deleted",
+        description: "The attendance record has been successfully deleted.",
+      });
+      setRecordToDelete(null);
+      if (currentRecords.length === 1 && currentPage > 1) {
+        setCurrentPage(currentPage - 1);
+      }
+    }
+  };
+
 
   return (
     <Card className="w-full max-w-4xl">
@@ -81,6 +108,7 @@ export default function AdminDashboard({
                   <TableHead>Floor</TableHead>
                   <TableHead>Timestamp</TableHead>
                   <TableHead>Location</TableHead>
+                  <TableHead className="text-right">Action</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -110,12 +138,39 @@ export default function AdminDashboard({
                           {record.location.latitude.toFixed(4)},{" "}
                           {record.location.longitude.toFixed(4)}
                         </div>
+
+                      </TableCell>
+                      <TableCell className="text-right">
+                         <AlertDialog>
+                          <AlertDialogTrigger asChild>
+                            <Button
+                              variant="destructive"
+                              size="sm"
+                              onClick={() => setRecordToDelete(record.id)}
+                            >
+                              <Trash2 className="mr-2 h-4 w-4" />
+                              Delete
+                            </Button>
+                          </AlertDialogTrigger>
+                          <AlertDialogContent>
+                            <AlertDialogHeader>
+                              <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+                              <AlertDialogDescription>
+                                This action cannot be undone. This will permanently delete the attendance record.
+                              </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                              <AlertDialogCancel onClick={() => setRecordToDelete(null)}>Cancel</AlertDialogCancel>
+                              <AlertDialogAction onClick={handleDelete}>Delete</AlertDialogAction>
+                            </AlertDialogFooter>
+                          </AlertDialogContent>
+                        </AlertDialog>
                       </TableCell>
                     </TableRow>
                   ))
                 ) : (
                   <TableRow>
-                    <TableCell colSpan={5} className="h-24 text-center">
+                    <TableCell colSpan={6} className="h-24 text-center">
                       No attendance records yet.
                     </TableCell>
                   </TableRow>

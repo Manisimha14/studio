@@ -2,19 +2,19 @@
 'use client';
 
 import { useState, useEffect, type ReactNode } from 'react';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { Header } from '@/components/Header';
 import { AttendanceProvider, useAttendance } from '@/context/AttendanceContext';
 import AdminLoginPage from './page';
 import Loading from '../loading';
 import AdminDashboard from './dashboard/page';
 
-function AdminDashboardLayout({ children }: { children: ReactNode }) {
+function AdminDashboardLayout({ children, onLogout }: { children: ReactNode; onLogout: () => void }) {
   const { records } = useAttendance();
 
   return (
     <div className="flex min-h-screen w-full flex-col">
-      <Header title="Admin Portal" />
+      <Header title="Admin Portal" onLogout={onLogout} />
       <main className="flex flex-1 flex-col items-center justify-center p-4">
         <AdminDashboard records={records} />
       </main>
@@ -26,20 +26,39 @@ function AdminDashboardLayout({ children }: { children: ReactNode }) {
 function AdminContent() {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
   const pathname = usePathname();
+  const router = useRouter();
 
   useEffect(() => {
     const session = window.localStorage.getItem('adminAuthenticated');
     setIsAuthenticated(session === 'true');
   }, [pathname]);
 
+  const handleLoginSuccess = () => {
+    window.localStorage.setItem('adminAuthenticated', 'true');
+    setIsAuthenticated(true);
+    router.replace('/admin/dashboard');
+  };
+  
+  const handleLogout = () => {
+    window.localStorage.removeItem('adminAuthenticated');
+    setIsAuthenticated(false);
+    router.replace('/admin');
+  };
+
+
   if (isAuthenticated === null) {
     return <Loading />;
   }
   
-  const handleLoginSuccess = () => {
-    window.localStorage.setItem('adminAuthenticated', 'true');
-    setIsAuthenticated(true);
-  };
+  if (!isAuthenticated && pathname === '/admin/dashboard') {
+     router.replace('/admin');
+     return <Loading />;
+  }
+  
+  if (isAuthenticated && pathname === '/admin') {
+      router.replace('/admin/dashboard');
+      return <Loading />;
+  }
 
   if (!isAuthenticated) {
     return (
@@ -53,7 +72,7 @@ function AdminContent() {
   }
 
   return (
-    <AdminDashboardLayout>
+    <AdminDashboardLayout onLogout={handleLogout}>
        <AdminDashboard records={[]} />
     </AdminDashboardLayout>
   );

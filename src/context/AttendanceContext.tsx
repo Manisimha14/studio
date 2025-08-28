@@ -24,6 +24,7 @@ interface StoredRecords {
 interface AttendanceContextType {
   records: AttendanceRecord[];
   addRecord: (record: Omit<AttendanceRecord, "id">) => void;
+  removeRecord: (id: number) => void;
 }
 
 const AttendanceContext = createContext<AttendanceContextType | undefined>(
@@ -54,6 +55,18 @@ export function AttendanceProvider({ children }: { children: ReactNode }) {
       console.error("Failed to read from localStorage", error);
     }
   }, []);
+  
+  const updateLocalStorage = (updatedRecords: AttendanceRecord[]) => {
+    try {
+        const dataToStore: StoredRecords = {
+            timestamp: new Date().getTime(),
+            records: updatedRecords,
+        };
+        window.localStorage.setItem(STORAGE_KEY, JSON.stringify(dataToStore));
+    } catch (error) {
+        console.error("Failed to write to localStorage", error);
+    }
+  };
 
   const addRecord = (record: Omit<AttendanceRecord, "id">) => {
     const newRecord = {
@@ -63,21 +76,22 @@ export function AttendanceProvider({ children }: { children: ReactNode }) {
     
     setRecords((prevRecords) => {
         const updatedRecords = [newRecord, ...prevRecords];
-        try {
-            const dataToStore: StoredRecords = {
-                timestamp: new Date().getTime(),
-                records: updatedRecords,
-            };
-            window.localStorage.setItem(STORAGE_KEY, JSON.stringify(dataToStore));
-        } catch (error) {
-            console.error("Failed to write to localStorage", error);
-        }
+        updateLocalStorage(updatedRecords);
+        return updatedRecords;
+    });
+  };
+  
+  const removeRecord = (id: number) => {
+    setRecords((prevRecords) => {
+        const updatedRecords = prevRecords.filter((record) => record.id !== id);
+        updateLocalStorage(updatedRecords);
         return updatedRecords;
     });
   };
 
+
   return (
-    <AttendanceContext.Provider value={{ records, addRecord }}>
+    <AttendanceContext.Provider value={{ records, addRecord, removeRecord }}>
       {children}
     </AttendanceContext.Provider>
   );
