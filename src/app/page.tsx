@@ -36,7 +36,7 @@ export default function Home() {
               </h3>
             </div>
           </Link>
-          <Link href="/admin/dashboard" className="block">
+          <Link href="/admin" className="block">
             <div className="group rounded-xl border-2 border-transparent bg-accent p-6 text-center transition-all hover:border-primary hover:bg-primary/5">
               <div className="mb-4 flex justify-center">
                 <Shield className="h-16 w-16 text-primary transition-transform group-hover:scale-110" />

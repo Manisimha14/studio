@@ -1,6 +1,8 @@
+
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -15,13 +17,10 @@ import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { Shield } from "lucide-react";
 
-interface AdminLoginProps {
-  onLoginSuccess: () => void;
-}
-
-export default function AdminLoginPage({ onLoginSuccess }: AdminLoginProps) {
+export default function AdminLoginPage() {
   const [password, setPassword] = useState("");
   const { toast } = useToast();
+  const router = useRouter();
 
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
@@ -30,7 +29,8 @@ export default function AdminLoginPage({ onLoginSuccess }: AdminLoginProps) {
         title: "Success",
         description: "Logged in successfully.",
       });
-      onLoginSuccess();
+      // Redirect to dashboard on success
+      router.push("/admin/dashboard");
     } else {
       toast({
         variant: "destructive",

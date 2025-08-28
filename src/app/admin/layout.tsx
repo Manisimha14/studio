@@ -1,36 +1,16 @@
+
 "use client";
 
 import { Header } from '@/components/Header';
 import type { ReactNode } from 'react';
-import { useState } from 'react';
-import AdminLoginPage from './login/page';
-import { useAttendance } from '@/context/AttendanceContext';
 
 export default function AdminLayout({ children }: { children: ReactNode }) {
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const { records } = useAttendance();
-
-  const handleLoginSuccess = () => {
-    setIsAuthenticated(true);
-  };
-
-  if (!isAuthenticated) {
     return (
-      <div className="flex min-h-screen w-full flex-col">
-        <Header title="Admin Login" />
-        <main className="flex flex-1 flex-col items-center justify-center p-4">
-          <AdminLoginPage onLoginSuccess={handleLoginSuccess} />
-        </main>
-      </div>
+        <div className="flex min-h-screen w-full flex-col">
+          <Header title="Admin Portal" />
+          <main className="flex flex-1 flex-col items-center justify-center p-4">
+           {children}
+          </main>
+        </div>
     );
-  }
-
-  return (
-      <div className="flex min-h-screen w-full flex-col">
-        <Header title="Admin Dashboard" />
-        <main className="flex flex-1 flex-col gap-4 p-4 md:gap-8 md:p-8">
-          {children}
-        </main>
-      </div>
-  );
 }
