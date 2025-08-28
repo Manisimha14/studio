@@ -33,6 +33,41 @@ import {
 } from "lucide-react";
 import { reverseGeocode } from "@/ai/flows/reverse-geocode-flow";
 
+// --- Geofencing Settings ---
+// Coordinates for Uniworld Apartments, Neeladri Nagar
+const TARGET_LOCATION = {
+  latitude: 12.845,
+  longitude: 77.665,
+};
+const ALLOWED_RADIUS_METERS = 500; // 500 meters radius
+
+/**
+ * Calculates the distance between two GPS coordinates in meters using the Haversine formula.
+ */
+function getDistanceInMeters(
+  lat1: number,
+  lon1: number,
+  lat2: number,
+  lon2: number
+): number {
+  const R = 6371e3; // Earth's radius in meters
+  const phi1 = (lat1 * Math.PI) / 180;
+  const phi2 = (lat2 * Math.PI) / 180;
+  const deltaPhi = ((lat2 - lat1) * Math.PI) / 180;
+  const deltaLambda = ((lon2 - lon1) * Math.PI) / 180;
+
+  const a =
+    Math.sin(deltaPhi / 2) * Math.sin(deltaPhi / 2) +
+    Math.cos(phi1) *
+      Math.cos(phi2) *
+      Math.sin(deltaLambda / 2) *
+      Math.sin(deltaLambda / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+
+  return R * c; // in meters
+}
+
+
 export default function AttendancePage() {
   const { addRecord } = useAttendance();
   const { toast } = useToast();
@@ -44,6 +79,7 @@ export default function AttendancePage() {
   } | null>(null);
    const [placeName, setPlaceName] = useState<string | null>(null);
   const [locationError, setLocationError] = useState<string | null>(null);
+  const [isInRange, setIsInRange] = useState(false);
   const [isMarked, setIsMarked] = useState(false);
   const [hasCameraPermission, setHasCameraPermission] = useState(true);
   const [snapshot, setSnapshot] = useState<string | null>(null);
@@ -79,6 +115,23 @@ export default function AttendancePage() {
           };
           setLocation(coords);
           setLocationError(null);
+
+          // Check if location is within the allowed radius
+          const distance = getDistanceInMeters(
+            coords.latitude,
+            coords.longitude,
+            TARGET_LOCATION.latitude,
+            TARGET_LOCATION.longitude
+          );
+
+          if (distance <= ALLOWED_RADIUS_METERS) {
+            setIsInRange(true);
+          } else {
+            setIsInRange(false);
+            setLocationError("You are not within the allowed area to mark attendance.");
+          }
+
+
            try {
             const { placeName } = await reverseGeocode(coords);
             setPlaceName(placeName);
@@ -149,12 +202,21 @@ export default function AttendancePage() {
       });
       return;
     }
-
+    
     if (!location) {
       toast({
         variant: "destructive",
         title: "Location Error",
         description: "Could not get your location. Please ensure it's enabled and try again.",
+      });
+      return;
+    }
+
+    if (!isInRange) {
+      toast({
+        variant: 'destructive',
+        title: 'Out of Range',
+        description: 'You are not within the allowed area to mark attendance.',
       });
       return;
     }
@@ -303,12 +365,13 @@ export default function AttendancePage() {
                   </Alert>
               )}
              {location && !locationError && (
-                 <Alert>
+                 <Alert variant={isInRange ? 'default' : 'destructive'}>
                     <MapPin className="h-4 w-4" />
                     <AlertTitle>{placeName || 'Acquiring location...'}</AlertTitle>
                     <AlertDescription>
-                        Lat: {location.latitude.toFixed(4)}, Long:{" "}
-                        {location.longitude.toFixed(4)}
+                         {isInRange
+                          ? `You are in the designated area. Lat: ${location.latitude.toFixed(4)}, Long: ${location.longitude.toFixed(4)}`
+                          : `You are outside the attendance zone. Lat: ${location.latitude.toFixed(4)}, Long: ${location.longitude.toFixed(4)}`}
                     </AlertDescription>
                   </Alert>
              )}
@@ -323,7 +386,7 @@ export default function AttendancePage() {
         <CardFooter>
           <Button
             onClick={handleMarkAttendance}
-            disabled={isLoading || !location || !snapshot || isMarked || !placeName}
+            disabled={isLoading || !location || !snapshot || isMarked || !placeName || !isInRange}
             className="w-full py-6 text-lg font-bold"
           >
             {isLoading ? (
