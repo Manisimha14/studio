@@ -16,12 +16,37 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Users } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Users, ArrowLeft, ArrowRight } from "lucide-react";
 import Image from "next/image";
-import { useAttendance } from "@/context/AttendanceContext";
+import type { AttendanceRecord } from "@/context/AttendanceContext";
+import { useState } from "react";
 
-export default function AdminDashboard() {
-  const { records } = useAttendance();
+const RECORDS_PER_PAGE = 5;
+
+export default function AdminDashboard({
+  records,
+}: {
+  records: AttendanceRecord[];
+}) {
+  const [currentPage, setCurrentPage] = useState(1);
+  const totalPages = Math.ceil(records.length / RECORDS_PER_PAGE);
+  const startIndex = (currentPage - 1) * RECORDS_PER_PAGE;
+  const endIndex = startIndex + RECORDS_PER_PAGE;
+  const currentRecords = records.slice(startIndex, endIndex);
+
+  const handleNextPage = () => {
+    if (currentPage < totalPages) {
+      setCurrentPage(currentPage + 1);
+    }
+  };
+
+  const handlePrevPage = () => {
+    if (currentPage > 1) {
+      setCurrentPage(currentPage - 1);
+    }
+  };
+
   return (
     <Card>
       <CardHeader className="flex flex-row items-center justify-between">
@@ -50,10 +75,10 @@ export default function AdminDashboard() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {records.length > 0 ? (
-              records.map((record) => (
+            {currentRecords.length > 0 ? (
+              currentRecords.map((record) => (
                 <TableRow key={record.id}>
-                   <TableCell>
+                  <TableCell>
                     {record.photo ? (
                       <Image
                         src={record.photo}
@@ -75,7 +100,6 @@ export default function AdminDashboard() {
                     {record.location.latitude.toFixed(4)},{" "}
                     {record.location.longitude.toFixed(4)}
                   </TableCell>
-
                 </TableRow>
               ))
             ) : (
@@ -87,6 +111,31 @@ export default function AdminDashboard() {
             )}
           </TableBody>
         </Table>
+         <div className="mt-6 flex items-center justify-between">
+          <div className="text-sm text-muted-foreground">
+            Page {currentPage} of {totalPages}
+          </div>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handlePrevPage}
+              disabled={currentPage === 1}
+            >
+              <ArrowLeft className="mr-2" />
+              Previous
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleNextPage}
+              disabled={currentPage === totalPages}
+            >
+              Next
+              <ArrowRight className="ml-2" />
+            </Button>
+          </div>
+        </div>
       </CardContent>
     </Card>
   );
