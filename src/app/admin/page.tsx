@@ -30,7 +30,7 @@ export default function AdminLoginPage({ onLoginSuccess }: { onLoginSuccess: () 
         description: "Logged in successfully.",
       });
       onLoginSuccess();
-      router.push("/admin/dashboard");
+      router.replace("/admin/dashboard");
     } else {
       toast({
         variant: "destructive",
