@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useRef, useEffect } from "react";
@@ -83,6 +84,14 @@ export default function AttendancePage() {
     };
 
     requestPermissions();
+
+    // Cleanup function to stop media stream
+    return () => {
+      if (videoRef.current && videoRef.current.srcObject) {
+        const stream = videoRef.current.srcObject as MediaStream;
+        stream.getTracks().forEach(track => track.stop());
+      }
+    };
   }, []);
 
   const handleCapture = () => {
@@ -159,24 +168,22 @@ export default function AttendancePage() {
 
     setIsLoading(true);
 
-    setTimeout(() => {
-      const newRecord = {
-        studentName,
-        floorNumber,
-        timestamp: new Date().toLocaleString(),
-        location,
-        photo: snapshot,
-      };
+    const newRecord = {
+      studentName,
+      floorNumber,
+      timestamp: new Date().toLocaleString(),
+      location,
+      photo: snapshot,
+    };
 
-      addRecord(newRecord);
-      setIsLoading(false);
-      setIsMarked(true);
-      toast({
-        title: "Success!",
-        description: "Thank you for marking the attendance.",
-      });
-      router.push("/");
-    }, 1500);
+    addRecord(newRecord);
+    setIsLoading(false);
+    setIsMarked(true);
+    toast({
+      title: "Success!",
+      description: "Thank you for marking the attendance.",
+    });
+    router.push("/");
   };
 
   return (

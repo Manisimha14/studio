@@ -1,7 +1,6 @@
 import type { Metadata } from 'next';
 import { Inter } from 'next/font/google';
 import './globals.css';
-import { AttendanceProvider } from '@/context/AttendanceContext';
 import { Toaster } from '@/components/ui/toaster';
 import { cn } from '@/lib/utils';
 
@@ -23,10 +22,8 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <body className={cn('min-h-screen bg-background font-sans antialiased', inter.variable)}>
-        <AttendanceProvider>
-          {children}
-          <Toaster />
-        </AttendanceProvider>
+        {children}
+        <Toaster />
       </body>
     </html>
   );
