@@ -5,6 +5,18 @@ import type { ReactNode } from 'react';
 import { useState } from 'react';
 import AdminLoginPage from './login/page';
 
+function AdminAuth({ onLoginSuccess }: { onLoginSuccess: () => void }) {
+  return (
+    <div className="flex min-h-screen w-full flex-col">
+      <Header title="Admin Login" />
+      <main className="flex flex-1 flex-col items-center justify-center p-4">
+        <AdminLoginPage onLoginSuccess={onLoginSuccess} />
+      </main>
+    </div>
+  );
+}
+
+
 export default function AdminLayout({ children }: { children: ReactNode }) {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
 
@@ -14,12 +26,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
 
   if (!isAuthenticated) {
     return (
-      <div className="flex min-h-screen w-full flex-col">
-        <Header title="Admin Login" />
-        <main className="flex flex-1 flex-col items-center justify-center p-4">
-          <AdminLoginPage onLoginSuccess={handleLoginSuccess} />
-        </main>
-      </div>
+      <AdminAuth onLoginSuccess={handleLoginSuccess} />
     );
   }
 

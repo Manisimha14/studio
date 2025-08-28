@@ -63,7 +63,7 @@ export default function AdminLoginPage({ onLoginSuccess }: AdminLoginProps) {
               required
               placeholder="Enter password"
             />
-            <p className="text-xs text-muted-foreground">
+             <p className="text-xs text-muted-foreground">
               Hint: The password is 'password'.
             </p>
           </div>

@@ -18,6 +18,7 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Users } from "lucide-react";
+import Image from "next/image";
 
 export default function AdminDashboard() {
   const { records } = useAttendance();
@@ -42,17 +43,30 @@ export default function AdminDashboard() {
         <Table>
           <TableHeader>
             <TableRow>
+              <TableHead>Photo</TableHead>
               <TableHead>Student</TableHead>
               <TableHead>Floor</TableHead>
               <TableHead>Timestamp</TableHead>
               <TableHead>Location (Lat, Long)</TableHead>
-              <TableHead>Photo</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {records.length > 0 ? (
               records.map((record) => (
                 <TableRow key={record.id}>
+                   <TableCell>
+                    {record.photo ? (
+                      <Image
+                        src={record.photo}
+                        alt={`Snapshot of ${record.studentName}`}
+                        width={64}
+                        height={64}
+                        className="h-16 w-16 rounded-md object-cover"
+                      />
+                    ) : (
+                      "No Photo"
+                    )}
+                  </TableCell>
                   <TableCell className="font-medium">
                     {record.studentName}
                   </TableCell>
@@ -62,17 +76,7 @@ export default function AdminDashboard() {
                     {record.location.latitude.toFixed(4)},{" "}
                     {record.location.longitude.toFixed(4)}
                   </TableCell>
-                  <TableCell>
-                    {record.photo ? (
-                      <img
-                        src={record.photo}
-                        alt={`Snapshot of ${record.studentName}`}
-                        className="h-16 w-16 rounded-md object-cover"
-                      />
-                    ) : (
-                      "No Photo"
-                    )}
-                  </TableCell>
+
                 </TableRow>
               ))
             ) : (
