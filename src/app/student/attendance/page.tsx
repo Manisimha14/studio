@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -18,7 +18,10 @@ import {
   Clock,
   Camera,
   CheckCircle,
+  VideoOff,
+  AlertTriangle,
 } from "lucide-react";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
 export default function AttendancePage() {
   const { addRecord } = useAttendance();
@@ -28,12 +31,44 @@ export default function AttendancePage() {
     latitude: number;
     longitude: number;
   } | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [locationError, setLocationError] = useState<string | null>(null);
   const [isMarked, setIsMarked] = useState(false);
+  const [hasCameraPermission, setHasCameraPermission] = useState<
+    boolean | undefined
+  >(undefined);
+  const [snapshot, setSnapshot] = useState<string | null>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+
+  useEffect(() => {
+    const getCameraPermission = async () => {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: true,
+        });
+        setHasCameraPermission(true);
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+        }
+      } catch (error) {
+        console.error("Error accessing camera:", error);
+        setHasCameraPermission(false);
+      }
+    };
+
+    getCameraPermission();
+
+    return () => {
+      if (videoRef.current && videoRef.current.srcObject) {
+        const stream = videoRef.current.srcObject as MediaStream;
+        stream.getTracks().forEach((track) => track.stop());
+      }
+    };
+  }, []);
 
   useEffect(() => {
     if (!navigator.geolocation) {
-      setError("Geolocation is not supported by your browser.");
+      setLocationError("Geolocation is not supported by your browser.");
       return;
     }
 
@@ -43,10 +78,10 @@ export default function AttendancePage() {
           latitude: position.coords.latitude,
           longitude: position.coords.longitude,
         });
-        setError(null);
+        setLocationError(null);
       },
       () => {
-        setError(
+        setLocationError(
           "Unable to retrieve your location. Please enable location services."
         );
       }
@@ -55,6 +90,21 @@ export default function AttendancePage() {
     return () => navigator.geolocation.clearWatch(watchId);
   }, []);
 
+  const handleCapture = () => {
+    if (videoRef.current && canvasRef.current) {
+      const video = videoRef.current;
+      const canvas = canvasRef.current;
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      const context = canvas.getContext("2d");
+      if (context) {
+        context.drawImage(video, 0, 0, video.videoWidth, video.videoHeight);
+        const dataUrl = canvas.toDataURL("image/png");
+        setSnapshot(dataUrl);
+      }
+    }
+  };
+
   const handleMarkAttendance = () => {
     if (!location) {
       toast({
@@ -62,6 +112,15 @@ export default function AttendancePage() {
         title: "Location Error",
         description:
           "Could not get your location. Please ensure it's enabled and try again.",
+      });
+      return;
+    }
+
+    if (!snapshot) {
+      toast({
+        variant: "destructive",
+        title: "Snapshot Required",
+        description: "Please take a snapshot before marking attendance.",
       });
       return;
     }
@@ -102,15 +161,62 @@ export default function AttendancePage() {
         <CardHeader>
           <CardTitle className="text-2xl">Mark Your Attendance</CardTitle>
           <CardDescription>
-            We need your location to verify you're in the right place.
+            A snapshot and your location are required to mark attendance.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
-          <div className="flex items-center gap-4 rounded-lg bg-muted p-4">
-            <Camera className="h-6 w-6 text-muted-foreground" />
-            <span className="text-muted-foreground">
-              Photo capture placeholder
-            </span>
+          <div className="space-y-4">
+            <div className="relative aspect-video w-full overflow-hidden rounded-lg border bg-muted">
+              <video
+                ref={videoRef}
+                className="h-full w-full object-cover"
+                autoPlay
+                muted
+                playsInline
+              />
+              <canvas ref={canvasRef} className="hidden" />
+              {hasCameraPermission === false && (
+                <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-center text-destructive">
+                  <VideoOff className="h-10 w-10" />
+                  <p className="font-semibold">Camera Access Denied</p>
+                  <p className="text-xs text-muted-foreground">
+                    Please enable camera permissions in your browser settings.
+                  </p>
+                </div>
+              )}
+              {hasCameraPermission === undefined && (
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+                </div>
+              )}
+              {snapshot && (
+                <img
+                  src={snapshot}
+                  alt="Snapshot"
+                  className="absolute inset-0 h-full w-full object-cover"
+                />
+              )}
+            </div>
+            {hasCameraPermission && (
+              <div className="flex gap-2">
+                <Button
+                  onClick={handleCapture}
+                  disabled={!!snapshot}
+                  className="flex-1"
+                >
+                  <Camera className="mr-2" />
+                  {snapshot ? "Snapshot Taken" : "Take Snapshot"}
+                </Button>
+                {snapshot && (
+                  <Button
+                    onClick={() => setSnapshot(null)}
+                    variant="outline"
+                  >
+                    Retake
+                  </Button>
+                )}
+              </div>
+            )}
           </div>
 
           <div className="flex items-center gap-4 rounded-lg bg-muted p-4">
@@ -124,14 +230,16 @@ export default function AttendancePage() {
             <MapPin className="mt-1 h-6 w-6 text-primary" />
             <div>
               <h4 className="font-semibold">Live Location</h4>
-              {error && <p className="text-sm text-destructive">{error}</p>}
-              {location && !error && (
+              {locationError && (
+                <p className="text-sm text-destructive">{locationError}</p>
+              )}
+              {location && !locationError && (
                 <p className="text-sm text-muted-foreground">
                   Lat: {location.latitude.toFixed(4)}, Long:{" "}
                   {location.longitude.toFixed(4)}
                 </p>
               )}
-              {!location && !error && (
+              {!location && !locationError && (
                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
                   <Loader2 className="h-4 w-4 animate-spin" />
                   <span>Acquiring location...</span>
@@ -143,7 +251,7 @@ export default function AttendancePage() {
         <CardFooter>
           <Button
             onClick={handleMarkAttendance}
-            disabled={isLoading || !location || isMarked}
+            disabled={isLoading || !location || !snapshot || isMarked}
             className="w-full py-6 text-lg"
           >
             {isLoading ? (
