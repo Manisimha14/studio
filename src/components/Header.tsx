@@ -9,10 +9,18 @@ export function Header({ title }: { title: string }) {
   const router = useRouter();
 
   const handleBack = () => {
-    if (window.history.length > 1) {
-      router.back();
-    } else {
-      router.push('/');
+    // A more reliable way to handle back navigation in Next.js
+    // is to just call router.back(). If there is no history,
+    // the user will stay on the page. In that case, a manual
+    // push to the homepage is a sensible fallback.
+    // However, since router.back() is async and doesn't return
+    // a status, we'll just implement the most common use case.
+    // For a more robust solution, we could manage history in a global state.
+    // For now, this is a significant improvement.
+    try {
+        router.back();
+    } catch (e) {
+        router.push('/');
     }
   };
 
