@@ -1,11 +1,18 @@
 
 'use client';
 
-import { Home, CheckSquare } from 'lucide-react';
+import { Home } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { ScalerLogo } from './ScalerLogo';
 
 export function Header({ title }: { title: string }) {
+  const router = useRouter();
+
+  const handleBack = () => {
+    router.back();
+  };
+
   return (
     <header className="sticky top-0 z-10 flex h-16 items-center justify-between border-b bg-card px-4 sm:px-6">
       <div className="flex items-center gap-4">
@@ -13,17 +20,15 @@ export function Header({ title }: { title: string }) {
           variant="outline"
           size="icon"
           className="h-8 w-8"
-          asChild
+          onClick={handleBack}
         >
-          <Link href="/">
             <Home className="h-4 w-4" />
             <span className="sr-only">Home</span>
-          </Link>
         </Button>
         <h1 className="text-xl font-semibold">{title}</h1>
       </div>
       <div className="flex items-center gap-2">
-        <CheckSquare className="h-6 w-6 text-primary" />
+        <ScalerLogo className="h-6 w-6 text-primary" />
         <span className="hidden text-lg font-bold text-primary sm:inline">
           Smart Uniworld 1
         </span>
