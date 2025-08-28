@@ -7,7 +7,7 @@ export default function Loading() {
         <Loader2 className="h-12 w-12 animate-spin text-primary" />
         <div>
           <h1 className="text-4xl font-bold tracking-tight text-foreground">
-            Loading GeoAttendance
+            Loading Smart Uniworld 1
           </h1>
           <p className="text-muted-foreground">Please wait a moment...</p>
         </div>

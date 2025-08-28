@@ -15,7 +15,7 @@ export default function Home() {
         <CheckSquare className="h-12 w-12 text-primary" />
         <div>
           <h1 className="text-5xl font-bold tracking-tight text-foreground">
-            GeoAttendance
+            Smart Uniworld 1
           </h1>
           <p className="text-muted-foreground">The Modern Attendance System</p>
         </div>

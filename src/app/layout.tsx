@@ -10,7 +10,7 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: 'GeoAttendance MVP',
+  title: 'Smart Uniworld 1',
   description: 'A modern attendance system using geolocation.',
 };
 

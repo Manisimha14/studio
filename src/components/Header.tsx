@@ -1,7 +1,7 @@
 
 'use client';
 
-import { ArrowLeft, CheckSquare, Home } from 'lucide-react';
+import { Home, CheckSquare } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import Link from 'next/link';
 
@@ -25,7 +25,7 @@ export function Header({ title }: { title: string }) {
       <div className="flex items-center gap-2">
         <CheckSquare className="h-6 w-6 text-primary" />
         <span className="hidden text-lg font-bold text-primary sm:inline">
-          GeoAttendance
+          Smart Uniworld 1
         </span>
       </div>
     </header>
