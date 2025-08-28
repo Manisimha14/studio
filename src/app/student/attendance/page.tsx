@@ -20,6 +20,7 @@ import {
   CheckCircle,
   VideoOff,
 } from "lucide-react";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
 export default function AttendancePage() {
   const { addRecord } = useAttendance();
@@ -51,6 +52,12 @@ export default function AttendancePage() {
       } catch (error) {
         console.error("Error accessing camera:", error);
         setHasCameraPermission(false);
+        toast({
+          variant: "destructive",
+          title: "Camera Access Denied",
+          description:
+            "Please enable camera permissions in your browser settings to use this app.",
+        });
       }
     };
 
@@ -62,7 +69,7 @@ export default function AttendancePage() {
         stream.getTracks().forEach((track) => track.stop());
       }
     };
-  }, []);
+  }, [toast]);
 
   useEffect(() => {
     if (!navigator.geolocation) {
@@ -214,6 +221,14 @@ export default function AttendancePage() {
                   </Button>
                 )}
               </div>
+            )}
+            {hasCameraPermission === false && (
+              <Alert variant="destructive">
+                <AlertTitle>Camera Access Required</AlertTitle>
+                <AlertDescription>
+                  Please allow camera access to use this feature.
+                </AlertDescription>
+              </Alert>
             )}
           </div>
 
