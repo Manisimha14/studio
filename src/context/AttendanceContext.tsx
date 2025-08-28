@@ -12,6 +12,7 @@ export interface AttendanceRecord {
     longitude: number;
   };
   photo: string | null;
+  floorNumber: string;
 }
 
 interface AttendanceContextType {

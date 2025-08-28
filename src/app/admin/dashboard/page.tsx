@@ -43,6 +43,7 @@ export default function AdminDashboard() {
           <TableHeader>
             <TableRow>
               <TableHead>Student</TableHead>
+              <TableHead>Floor</TableHead>
               <TableHead>Timestamp</TableHead>
               <TableHead>Location (Lat, Long)</TableHead>
               <TableHead>Photo</TableHead>
@@ -55,6 +56,7 @@ export default function AdminDashboard() {
                   <TableCell className="font-medium">
                     {record.studentName}
                   </TableCell>
+                  <TableCell>{record.floorNumber}</TableCell>
                   <TableCell>{record.timestamp}</TableCell>
                   <TableCell>
                     {record.location.latitude.toFixed(4)},{" "}
@@ -75,7 +77,7 @@ export default function AdminDashboard() {
               ))
             ) : (
               <TableRow>
-                <TableCell colSpan={4} className="h-24 text-center">
+                <TableCell colSpan={5} className="h-24 text-center">
                   No attendance records yet.
                 </TableCell>
               </TableRow>

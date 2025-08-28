@@ -10,6 +10,8 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { useAttendance } from "@/context/AttendanceContext";
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -19,6 +21,8 @@ import {
   Camera,
   CheckCircle,
   VideoOff,
+  User,
+  Building,
 } from "lucide-react";
 
 export default function AttendancePage() {
@@ -35,6 +39,8 @@ export default function AttendancePage() {
     boolean | undefined
   >(undefined);
   const [snapshot, setSnapshot] = useState<string | null>(null);
+  const [studentName, setStudentName] = useState("");
+  const [floorNumber, setFloorNumber] = useState("");
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
@@ -97,6 +103,15 @@ export default function AttendancePage() {
   };
 
   const handleMarkAttendance = () => {
+    if (!studentName || !floorNumber) {
+      toast({
+        variant: "destructive",
+        title: "Missing Information",
+        description: "Please enter your name and floor number.",
+      });
+      return;
+    }
+
     if (!location) {
       toast({
         variant: "destructive",
@@ -128,10 +143,8 @@ export default function AttendancePage() {
 
     setTimeout(() => {
       const newRecord = {
-        studentName: `Student-${Math.random()
-          .toString(36)
-          .substring(2, 7)
-          .toUpperCase()}`,
+        studentName,
+        floorNumber,
         timestamp: new Date().toLocaleString(),
         location,
         photo: snapshot,
@@ -153,10 +166,35 @@ export default function AttendancePage() {
         <CardHeader>
           <CardTitle className="text-2xl">Mark Your Attendance</CardTitle>
           <CardDescription>
-            A snapshot and your location are required to mark attendance.
+            Your name, floor, a snapshot and your location are required to mark attendance.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
+           <div className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="studentName" className="flex items-center gap-2">
+                <User /> Student Name
+              </Label>
+              <Input
+                id="studentName"
+                value={studentName}
+                onChange={(e) => setStudentName(e.target.value)}
+                placeholder="Enter your full name"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="floorNumber" className="flex items-center gap-2">
+                <Building /> Floor Number
+              </Label>
+              <Input
+                id="floorNumber"
+                value={floorNumber}
+                onChange={(e) => setFloorNumber(e.target.value)}
+                placeholder="e.g., 4th Floor"
+              />
+            </div>
+          </div>
+
           {!hasCameraPermission && (
             <Button onClick={enableCamera} className="w-full">
               <Camera className="mr-2" /> Enable Camera
