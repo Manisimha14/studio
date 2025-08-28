@@ -1,6 +1,5 @@
 "use client";
 
-import { useAttendance } from "@/context/AttendanceContext";
 import {
   Card,
   CardContent,
@@ -19,10 +18,13 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Users } from "lucide-react";
 import Image from "next/image";
+import type { AttendanceRecord } from "@/context/AttendanceContext";
 
-export default function AdminDashboard() {
-  const { records } = useAttendance();
+interface AdminDashboardProps {
+  records: AttendanceRecord[];
+}
 
+export default function AdminDashboard({ records }: AdminDashboardProps) {
   return (
     <Card>
       <CardHeader className="flex flex-row items-center justify-between">

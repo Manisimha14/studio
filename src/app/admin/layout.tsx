@@ -4,6 +4,8 @@ import { Header } from '@/components/Header';
 import type { ReactNode } from 'react';
 import { useState } from 'react';
 import AdminLoginPage from './login/page';
+import AdminDashboard from './dashboard/page';
+import { useAttendance } from '@/context/AttendanceContext';
 
 function AdminAuth({ onLoginSuccess }: { onLoginSuccess: () => void }) {
   return (
@@ -17,8 +19,9 @@ function AdminAuth({ onLoginSuccess }: { onLoginSuccess: () => void }) {
 }
 
 
-export default function AdminLayout({ children }: { children: ReactNode }) {
+export default function AdminLayout({ }: { children: ReactNode }) {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const { records } = useAttendance();
 
   const handleLoginSuccess = () => {
     setIsAuthenticated(true);
@@ -34,7 +37,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
     <div className="flex min-h-screen w-full flex-col">
       <Header title="Admin Dashboard" />
       <main className="flex flex-1 flex-col gap-4 p-4 md:gap-8 md:p-8">
-        {children}
+        <AdminDashboard records={records} />
       </main>
     </div>
   );
