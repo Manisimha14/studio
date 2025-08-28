@@ -45,6 +45,7 @@ export default function AdminDashboard() {
               <TableHead>Student</TableHead>
               <TableHead>Timestamp</TableHead>
               <TableHead>Location (Lat, Long)</TableHead>
+              <TableHead>Photo</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -59,11 +60,22 @@ export default function AdminDashboard() {
                     {record.location.latitude.toFixed(4)},{" "}
                     {record.location.longitude.toFixed(4)}
                   </TableCell>
+                  <TableCell>
+                    {record.photo ? (
+                      <img
+                        src={record.photo}
+                        alt={`Snapshot of ${record.studentName}`}
+                        className="h-16 w-16 rounded-md object-cover"
+                      />
+                    ) : (
+                      "No Photo"
+                    )}
+                  </TableCell>
                 </TableRow>
               ))
             ) : (
               <TableRow>
-                <TableCell colSpan={3} className="h-24 text-center">
+                <TableCell colSpan={4} className="h-24 text-center">
                   No attendance records yet.
                 </TableCell>
               </TableRow>

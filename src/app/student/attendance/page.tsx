@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -20,7 +20,6 @@ import {
   CheckCircle,
   VideoOff,
 } from "lucide-react";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
 export default function AttendancePage() {
   const { addRecord } = useAttendance();
@@ -39,36 +38,34 @@ export default function AttendancePage() {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
-  useEffect(() => {
-    const getCameraPermission = async () => {
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: true,
-        });
-        setHasCameraPermission(true);
-        if (videoRef.current) {
-          videoRef.current.srcObject = stream;
-        }
-      } catch (error) {
-        console.error("Error accessing camera:", error);
-        setHasCameraPermission(false);
-        toast({
-          variant: "destructive",
-          title: "Camera Access Denied",
-          description:
-            "Please enable camera permissions in your browser settings to use this app.",
-        });
+  const enableCamera = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: true,
+      });
+      setHasCameraPermission(true);
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
       }
-    };
+    } catch (error) {
+      console.error("Error accessing camera:", error);
+      setHasCameraPermission(false);
+      toast({
+        variant: "destructive",
+        title: "Camera Access Denied",
+        description:
+          "Please enable camera permissions in your browser settings to use this app.",
+      });
+    }
+  };
 
-    getCameraPermission();
-
+  const getLocation = () => {
     if (!navigator.geolocation) {
       setLocationError("Geolocation is not supported by your browser.");
       return;
     }
 
-    const watchId = navigator.geolocation.watchPosition(
+    navigator.geolocation.getCurrentPosition(
       (position) => {
         setLocation({
           latitude: position.coords.latitude,
@@ -82,15 +79,7 @@ export default function AttendancePage() {
         );
       }
     );
-
-    return () => {
-      if (videoRef.current && videoRef.current.srcObject) {
-        const stream = videoRef.current.srcObject as MediaStream;
-        stream.getTracks().forEach((track) => track.stop());
-      }
-      navigator.geolocation.clearWatch(watchId);
-    };
-  }, [toast]);
+  };
 
   const handleCapture = () => {
     if (videoRef.current && canvasRef.current) {
@@ -145,6 +134,7 @@ export default function AttendancePage() {
           .toUpperCase()}`,
         timestamp: new Date().toLocaleString(),
         location,
+        photo: snapshot,
       };
 
       addRecord(newRecord);
@@ -167,6 +157,12 @@ export default function AttendancePage() {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
+          {!hasCameraPermission && (
+            <Button onClick={enableCamera} className="w-full">
+              <Camera className="mr-2" /> Enable Camera
+            </Button>
+          )}
+
           <div className="space-y-4">
             <div className="relative aspect-video w-full overflow-hidden rounded-lg border bg-muted">
               <video
@@ -181,16 +177,9 @@ export default function AttendancePage() {
                 <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-center text-destructive">
                   <VideoOff className="h-10 w-10" />
                   <p className="font-semibold">Camera Access Denied</p>
-                  <p className="text-xs text-muted-foreground">
-                    Please enable camera permissions in your browser settings.
-                  </p>
                 </div>
               )}
-              {hasCameraPermission === undefined && (
-                <div className="absolute inset-0 flex items-center justify-center">
-                  <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-                </div>
-              )}
+
               {snapshot && (
                 <img
                   src={snapshot}
@@ -210,22 +199,11 @@ export default function AttendancePage() {
                   {snapshot ? "Snapshot Taken" : "Take Snapshot"}
                 </Button>
                 {snapshot && (
-                  <Button
-                    onClick={() => setSnapshot(null)}
-                    variant="outline"
-                  >
+                  <Button onClick={() => setSnapshot(null)} variant="outline">
                     Retake
                   </Button>
                 )}
               </div>
-            )}
-            {hasCameraPermission === false && (
-              <Alert variant="destructive">
-                <AlertTitle>Camera Access Required</AlertTitle>
-                <AlertDescription>
-                  Please allow camera access to use this feature.
-                </AlertDescription>
-              </Alert>
             )}
           </div>
 
@@ -235,6 +213,9 @@ export default function AttendancePage() {
               Timestamp will be recorded automatically
             </span>
           </div>
+          <Button onClick={getLocation} variant="outline" className="w-full">
+            <MapPin className="mr-2" /> Get Location
+          </Button>
 
           <div className="flex items-start gap-4 rounded-lg border p-4">
             <MapPin className="mt-1 h-6 w-6 text-primary" />
