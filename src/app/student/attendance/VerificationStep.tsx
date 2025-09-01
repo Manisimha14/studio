@@ -61,21 +61,30 @@ export default function VerificationStep({ onVerified, isSubmitting, onBack }: V
       onVerified(null);
     }
   }, [onVerified]);
-
+  
   const setupCamera = useCallback(async (isRetry = false) => {
       if (isRetry) playSound('click');
       setStatus("initializing");
+
+      if (!navigator.mediaDevices?.getUserMedia) {
+        setStatus("error");
+        playSound('error');
+        return;
+      }
 
       try {
         const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' } });
         if (videoRef.current) {
             videoRef.current.srcObject = stream;
+            // The 'onloadedmetadata' event listener is more reliable
             videoRef.current.onloadedmetadata = () => {
-                videoRef.current?.play().catch(e => {
+                videoRef.current?.play().then(() => {
+                    setStatus("ready");
+                }).catch(e => {
                     console.error("Video play failed:", e);
                     setStatus("error");
+                    playSound('error');
                 });
-                setStatus("ready");
             };
         }
       } catch (error) {
@@ -91,8 +100,9 @@ export default function VerificationStep({ onVerified, isSubmitting, onBack }: V
 
   useEffect(() => {
     setupCamera();
+    
+    // Cleanup function to stop all video tracks when the component unmounts
     return () => {
-      // Stop all video tracks when the component unmounts
       if (videoRef.current && videoRef.current.srcObject) {
         const stream = videoRef.current.srcObject as MediaStream;
         stream.getTracks().forEach(track => track.stop());
@@ -124,7 +134,7 @@ export default function VerificationStep({ onVerified, isSubmitting, onBack }: V
               <Alert variant="destructive" className={`${commonClasses} bg-destructive/90`}>
                   <AlertTriangle className="h-10 w-10" />
                   <AlertTitle>An Error Occurred</AlertTitle>
-                  <AlertDescription>Could not start camera. Please try again.</AlertDescription>
+                  <AlertDescription>Could not start camera. Please check device permissions and try again.</AlertDescription>
                   <Button onClick={() => setupCamera(true)}><RefreshCw className="mr-2"/>Try Again</Button>
               </Alert>
             );
