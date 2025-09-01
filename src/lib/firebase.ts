@@ -5,7 +5,6 @@ import { getDatabase } from "firebase/database";
 const firebaseConfig = {
   projectId: "geoattendance-mvp",
   appId: "1:735578389641:web:9422aa71efbf9e709ada58",
-  storageBucket: "geoattendance-mvp.firebasestorage.app",
   apiKey: "AIzaSyCtBjG85YxZTqyaJ4oKTZF2MUPrdgASadA",
   authDomain: "geoattendance-mvp.firebaseapp.com",
   measurementId: "",
