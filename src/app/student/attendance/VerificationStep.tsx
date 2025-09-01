@@ -31,10 +31,99 @@ interface VerificationStepProps {
     onBack: () => void;
 }
 
+
+// --- Final Optimization Configuration ---
+const DETECTION_INTERVAL_MS = 750; // Balance responsiveness and performance
+const VIDEO_CONSTRAINTS = {
+  width: { ideal: 640 },
+  height: { ideal: 480 },
+  facingMode: 'user'
+};
+
 export default function VerificationStep({ onVerified, isSubmitting, onBack }: VerificationStepProps) {
-  const [status, setStatus] = useState<"initializing" | "ready" | "error" | "permission_denied">("initializing");
+  const [cameraStatus, setCameraStatus] = useState("initializing");
+  const [detectorStatus, setDetectorStatus] = useState("loading");
+  const [isProxyDetected, setIsProxyDetected] = useState(false);
+
   const videoRef = useRef<HTMLVideoElement>(null);
-  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null); // For the final snapshot
+  const offscreenCanvasRef = useRef<HTMLCanvasElement | null>(null); // For ImageBitmap creation
+  const workerRef = useRef<Worker | null>(null);
+  const requestRef = useRef<number>();
+  const lastCheckTime = useRef(0);
+  const isProxyDetectedRef = useRef(false);
+
+  // The main loop that sends frames to the worker
+  const predictWebcam = useCallback(async () => {
+    // Ensure everything is ready for detection
+    if (cameraStatus === "ready" && detectorStatus === "ready" && workerRef.current && videoRef.current && videoRef.current.readyState >= 3) {
+      const now = performance.now();
+      if (now - lastCheckTime.current > DETECTION_INTERVAL_MS) {
+        lastCheckTime.current = now;
+
+        if (!offscreenCanvasRef.current) {
+          offscreenCanvasRef.current = document.createElement('canvas');
+          offscreenCanvasRef.current.width = videoRef.current.videoWidth;
+          offscreenCanvasRef.current.height = videoRef.current.videoHeight;
+        }
+
+        const context = offscreenCanvasRef.current.getContext('2d');
+        if (context) {
+          context.drawImage(videoRef.current, 0, 0);
+          const imageBitmap = await createImageBitmap(offscreenCanvasRef.current);
+          
+          // Post the bitmap to the worker, transferring ownership (zero-copy)
+          workerRef.current.postMessage({ type: 'detect', frame: imageBitmap }, [imageBitmap]);
+        }
+      }
+    }
+    requestRef.current = requestAnimationFrame(predictWebcam);
+  }, [cameraStatus, detectorStatus]);
+
+  // The main effect for setup and cleanup
+  useEffect(() => {
+    workerRef.current = new Worker('/detection.worker.js');
+
+    workerRef.current.onmessage = (event) => {
+      const { type, isProxyDetected, error } = event.data;
+      if (type === 'ready') setDetectorStatus("ready");
+      else if (type === 'error') {
+        console.error("Worker initialization failed:", error);
+        setDetectorStatus("failed");
+      } else if (type === 'result') {
+        if (isProxyDetectedRef.current !== isProxyDetected) {
+          isProxyDetectedRef.current = isProxyDetected;
+          setIsProxyDetected(isProxyDetected);
+        }
+      }
+    };
+    workerRef.current.postMessage({ type: 'init' });
+
+    const setupCamera = async () => {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ video: VIDEO_CONSTRAINTS });
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+          videoRef.current.onloadedmetadata = () => setCameraStatus("ready");
+        }
+      } catch (err) {
+        console.error("Camera setup failed:", err);
+        setCameraStatus("error");
+      }
+    };
+    setupCamera();
+
+    requestRef.current = requestAnimationFrame(predictWebcam);
+
+    return () => {
+      if (requestRef.current) cancelAnimationFrame(requestRef.current);
+      workerRef.current?.terminate();
+      if (videoRef.current && videoRef.current.srcObject) {
+        (videoRef.current.srcObject as MediaStream).getTracks().forEach(track => track.stop());
+      }
+    };
+  }, [predictWebcam]);
+
 
   const handleCapture = useCallback(() => {
     playSound('capture');
@@ -48,11 +137,9 @@ export default function VerificationStep({ onVerified, isSubmitting, onBack }: V
 
       const context = canvas.getContext("2d");
       if (context) {
-        // Flip the image horizontally for a mirror effect, which is more intuitive for selfies.
         context.translate(canvas.width, 0);
         context.scale(-1, 1);
         context.drawImage(video, 0, 0, canvas.width, canvas.height);
-        // Reset the transform so future draws are normal.
         context.setTransform(1, 0, 0, 1, 0, 0);
 
         const dataUrl = canvas.toDataURL("image/jpeg", 0.8);
@@ -65,91 +152,44 @@ export default function VerificationStep({ onVerified, isSubmitting, onBack }: V
     }
   }, [onVerified]);
   
-  const setupCamera = useCallback(async (isRetry = false) => {
-      if (isRetry) playSound('click');
-      setStatus("initializing");
-
-      if (!navigator.mediaDevices?.getUserMedia) {
-        setStatus("error");
-        playSound('error');
-        return;
-      }
-
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' } });
-        if (videoRef.current) {
-            videoRef.current.srcObject = stream;
-            // The `oncanplay` event is a more reliable indicator that the video is ready to be shown.
-            // It fires when the browser can start playing the video.
-            videoRef.current.oncanplay = () => {
-                setStatus("ready");
-            };
-        }
-      } catch (error) {
-        console.error("Camera setup failed:", error);
-        if (error instanceof Error && (error.name === 'NotAllowedError' || error.name === 'PermissionDeniedError')) {
-            setStatus("permission_denied");
-        } else {
-            setStatus("error");
-        }
-        playSound('error');
-      }
-  }, []);
-
-  useEffect(() => {
-    setupCamera();
-    
-    // Cleanup function to stop all video tracks when the component unmounts
-    return () => {
-      if (videoRef.current && videoRef.current.srcObject) {
-        const stream = videoRef.current.srcObject as MediaStream;
-        stream.getTracks().forEach(track => track.stop());
-      }
-    };
-  }, [setupCamera]);
-
   const renderOverlay = () => {
     const commonClasses = "absolute inset-0 flex flex-col items-center justify-center gap-2 text-center p-4 rounded-lg";
-    switch (status) {
-        case "initializing":
-            return (
-                <div className={`${commonClasses} bg-background/80`}>
-                    <Loader2 className="h-8 w-8 animate-spin text-primary"/>
-                    <p className="text-muted-foreground animate-pulse">Initializing Camera...</p>
-                </div>
-            );
-        case "permission_denied":
-            return (
-              <Alert variant="destructive" className={`${commonClasses} bg-destructive/90 text-destructive-foreground`}>
-                  <VideoOff className="h-10 w-10" />
-                  <AlertTitle>Camera Access Denied</AlertTitle>
-                  <AlertDescription>Please allow camera access in your browser settings to continue.</AlertDescription>
-                  <Button variant="secondary" onClick={() => setupCamera(true)}><RefreshCw className="mr-2"/>Try Again</Button>
-              </Alert>
-            );
-        case "error":
-            return (
-              <Alert variant="destructive" className={`${commonClasses} bg-destructive/90 text-destructive-foreground`}>
-                  <AlertTriangle className="h-10 w-10" />
-                  <AlertTitle>An Error Occurred</AlertTitle>
-                  <AlertDescription>Could not start camera. Please check device permissions and try again.</AlertDescription>
-                  <Button variant="secondary" onClick={() => setupCamera(true)}><RefreshCw className="mr-2"/>Try Again</Button>
-              </Alert>
-            );
-        case "ready":
-             if (isSubmitting) {
-                 return (
-                     <div className={`${commonClasses} bg-background/80 backdrop-blur-sm`}>
-                         <Loader2 className="h-8 w-8 animate-spin text-primary"/>
-                         <p className="text-muted-foreground">Submitting...</p>
-                     </div>
-                 );
-             }
-            return null;
-        default:
-            return null;
+    if (isSubmitting) {
+         return (
+             <div className={`${commonClasses} bg-background/80 backdrop-blur-sm`}>
+                 <Loader2 className="h-8 w-8 animate-spin text-primary"/>
+                 <p className="text-muted-foreground">Submitting...</p>
+             </div>
+         );
     }
+    
+    if (cameraStatus !== 'ready' || detectorStatus !== 'ready') {
+        const message = cameraStatus !== 'ready' 
+            ? 'Initializing Camera...' 
+            : 'Loading AI Model...';
+
+        return (
+            <div className={`${commonClasses} bg-background/80`}>
+                <Loader2 className="h-8 w-8 animate-spin text-primary"/>
+                <p className="text-muted-foreground animate-pulse">{message}</p>
+            </div>
+        );
+    }
+    
+    if (cameraStatus === 'error') {
+        return (
+          <Alert variant="destructive" className={`${commonClasses} bg-destructive/90 text-destructive-foreground`}>
+              <AlertTriangle className="h-10 w-10" />
+              <AlertTitle>Camera Error</AlertTitle>
+              <AlertDescription>Could not start camera. Please check device permissions and try again.</AlertDescription>
+          </Alert>
+        );
+    }
+    
+    return null;
   }
+
+  const isButtonDisabled = cameraStatus !== 'ready' || detectorStatus !== 'ready' || isSubmitting || isProxyDetected;
 
   return (
     <>
@@ -161,7 +201,7 @@ export default function VerificationStep({ onVerified, isSubmitting, onBack }: V
         <div className="relative aspect-video w-full overflow-hidden rounded-lg border-2 border-dashed bg-muted">
             <video
                 ref={videoRef}
-                className={`h-full w-full object-cover scale-x-[-1] transition-opacity duration-300 ${status === 'ready' ? 'opacity-100' : 'opacity-0'}`}
+                className={`h-full w-full object-cover scale-x-[-1] transition-opacity duration-300 ${cameraStatus === 'ready' ? 'opacity-100' : 'opacity-0'}`}
                 autoPlay
                 muted
                 playsInline
@@ -169,9 +209,18 @@ export default function VerificationStep({ onVerified, isSubmitting, onBack }: V
             <canvas ref={canvasRef} className="hidden" />
             {renderOverlay()}
         </div>
+        {isProxyDetected && (
+            <Alert variant="destructive">
+                <AlertTriangle className="h-4 w-4" />
+                <AlertTitle>Proxy Detected</AlertTitle>
+                <AlertDescription>
+                   A phone was detected in the video feed. Please remove it to continue.
+                </AlertDescription>
+            </Alert>
+        )}
         <Button 
             onClick={handleCapture} 
-            disabled={status !== 'ready' || isSubmitting}
+            disabled={isButtonDisabled}
             className="w-full py-6 text-lg font-semibold transition-all hover:scale-105 active:scale-100"
         >
             <Camera className="mr-2"/>
