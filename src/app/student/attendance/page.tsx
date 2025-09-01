@@ -65,7 +65,7 @@ export default function AttendancePage() {
        const devices = await navigator.mediaDevices.enumerateDevices();
        const videoInputs = devices.filter(device => device.kind === 'videoinput');
        
-       const suspiciousKeywords = ['obs', 'virtual', 'droidcam', 'splitcam'];
+       const suspiciousKeywords = ['obs', 'droidcam', 'splitcam', 'vcam'];
        const isVirtualCamera = videoInputs.some(device => 
          suspiciousKeywords.some(keyword => device.label.toLowerCase().includes(keyword))
        );
@@ -76,8 +76,8 @@ export default function AttendancePage() {
           playError();
           toast({
             variant: 'destructive',
-            title: 'Virtual Camera Detected',
-            description: 'Please use a genuine physical webcam for attendance.',
+            title: 'Unsupported Camera Detected',
+            description: 'Use of virtual camera software like OBS or Droidcam is not allowed.',
           });
           return;
        }
@@ -333,8 +333,8 @@ export default function AttendancePage() {
                 {virtualCameraDetected && (
                    <Alert variant="destructive" className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-center">
                         <Ban className="h-10 w-10" />
-                        <AlertTitle>Virtual Camera Detected</AlertTitle>
-                        <AlertDescription>Please use a physical webcam and refresh the page.</AlertDescription>
+                        <AlertTitle>Unsupported Camera Detected</AlertTitle>
+                        <AlertDescription>Please disable virtual camera software (like OBS) and use a physical webcam.</AlertDescription>
                     </Alert>
                 )}
 
