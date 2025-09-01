@@ -43,7 +43,7 @@ export default function AttendancePage() {
   } | null>(null);
   const [locationError, setLocationError] = useState<string | null>(null);
   const [isMarked, setIsMarked] = useState(false);
-  const [hasCameraPermission, setHasCameraPermission] = useState(true);
+  const [hasCameraPermission, setHasCameraPermission] = useState<boolean | null>(null);
   const [snapshot, setSnapshot] = useState<string | null>(null);
   const [studentName, setStudentName] = useState("");
   const [floorNumber, setFloorNumber] = useState("");
@@ -70,24 +70,22 @@ export default function AttendancePage() {
         return;
       }
       navigator.geolocation.getCurrentPosition(
-        async (position) => {
-          const coords = {
+        (position) => {
+          setLocation({
             latitude: position.coords.latitude,
             longitude: position.coords.longitude,
-          };
-          setLocation(coords);
+          });
           setLocationError(null);
         },
         () => {
-          setLocationError("Unable to retrieve your location. Please enable location services.");
+          setLocationError("Unable to retrieve your location. Please enable location services in your browser settings and refresh the page.");
         },
-        { enableHighAccuracy: true } // Request high accuracy
+        { enableHighAccuracy: true }
       );
     };
 
     requestPermissions();
 
-    // Cleanup function to stop media stream
     return () => {
       if (videoRef.current && videoRef.current.srcObject) {
         const stream = videoRef.current.srcObject as MediaStream;
@@ -108,7 +106,6 @@ export default function AttendancePage() {
         const dataUrl = canvas.toDataURL("image/jpeg", 0.5);
         setSnapshot(dataUrl);
 
-        // Stop the camera stream after taking a snapshot
         const stream = video.srcObject as MediaStream;
         if(stream) {
           stream.getTracks().forEach(track => track.stop());
@@ -122,6 +119,7 @@ export default function AttendancePage() {
     const getCameraPermission = async () => {
       try {
         const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+        setHasCameraPermission(true);
         if (videoRef.current) {
           videoRef.current.srcObject = stream;
         }
@@ -172,21 +170,13 @@ export default function AttendancePage() {
 
     setIsSubmitting(true);
 
-    const newRecord = {
-      studentName,
-      floorNumber,
-      location,
-      photo: snapshot,
-    };
-
     try {
-        await addRecord(newRecord);
+        await addRecord({ studentName, floorNumber, location, photo: snapshot });
         setIsMarked(true);
         toast({
           title: "Success!",
           description: "Thank you for marking the attendance.",
         });
-        // Redirect after a short delay to allow user to see success message
         setTimeout(() => router.push("/"), 1000);
     } catch (error) {
         console.error("Error marking attendance:", error);
@@ -242,20 +232,27 @@ export default function AttendancePage() {
                 <Camera className="text-primary" /> Snapshot
               </Label>
             <div className="relative aspect-video w-full overflow-hidden rounded-lg border-2 border-dashed bg-muted">
-              <video
-                ref={videoRef}
-                className={`h-full w-full object-cover ${snapshot ? 'hidden' : ''}`}
-                autoPlay
-                muted
-                playsInline
-              />
+              {hasCameraPermission !== false && (
+                <video
+                  ref={videoRef}
+                  className={`h-full w-full object-cover ${snapshot ? 'hidden' : ''}`}
+                  autoPlay
+                  muted
+                  playsInline
+                />
+              )}
               <canvas ref={canvasRef} className="hidden" />
-              {!hasCameraPermission && (
-                <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-center text-destructive p-4">
-                  <VideoOff className="h-10 w-10" />
-                  <p className="font-semibold">Camera Access Denied</p>
-                   <p className="text-sm">Please allow camera access in your browser settings.</p>
-                </div>
+              {hasCameraPermission === false && (
+                <Alert variant="destructive" className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-center">
+                    <VideoOff className="h-10 w-10" />
+                    <AlertTitle>Camera Access Denied</AlertTitle>
+                    <AlertDescription>Please allow camera access in your browser settings and refresh the page.</AlertDescription>
+                </Alert>
+              )}
+              {hasCameraPermission === null && (
+                 <div className="flex items-center justify-center h-full">
+                    <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+                 </div>
               )}
 
               {snapshot && (
@@ -316,7 +313,7 @@ export default function AttendancePage() {
         <CardFooter>
           <Button
             onClick={handleMarkAttendance}
-            disabled={isSubmitting || !location || !snapshot || isMarked}
+            disabled={isSubmitting || !location || !snapshot || isMarked || !hasCameraPermission}
             className="w-full py-6 text-lg font-bold"
           >
             {isSubmitting ? (

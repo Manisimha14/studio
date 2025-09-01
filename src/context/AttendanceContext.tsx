@@ -46,8 +46,8 @@ export function AttendanceProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const attendanceRef = ref(db, 'attendance');
     
-    // Listen for real-time updates
     const unsubscribe = onValue(attendanceRef, (snapshot) => {
+      setLoading(true);
       const data = snapshot.val();
       if (data) {
         const loadedRecords: AttendanceRecord[] = Object.keys(data)
@@ -55,21 +55,19 @@ export function AttendanceProvider({ children }: { children: ReactNode }) {
             id: key,
             ...data[key],
           }))
-          .sort((a, b) => b.timestamp - a.timestamp); // Sort by most recent
+          .sort((a, b) => b.timestamp - a.timestamp); 
         setRecords(loadedRecords);
       } else {
         setRecords([]);
       }
-      setLoading(false); // Set loading to false after first data load
+      setLoading(false);
     });
 
-    // Cleanup subscription on unmount
     return () => unsubscribe();
   }, []);
 
   const addRecord = async ({ studentName, floorNumber, location, photo }: NewRecord) => {
     const attendanceRef = ref(db, 'attendance');
-    // Explicitly create the object to be pushed
     const newRecordPayload = {
       studentName,
       floorNumber,

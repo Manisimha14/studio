@@ -20,8 +20,8 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Users, ArrowLeft, ArrowRight, Trash2, Loader2, ListX } from "lucide-react";
 import Image from "next/image";
-import { useState } from "react";
-import { AttendanceRecord, useAttendance } from "@/context/AttendanceContext";
+import { useState, useMemo } from "react";
+import { useAttendance } from "@/context/AttendanceContext";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -47,11 +47,12 @@ export default function AdminDashboard() {
   const [recordToDelete, setRecordToDelete] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
 
-
   const totalPages = Math.ceil(records.length / RECORDS_PER_PAGE);
-  const startIndex = (currentPage - 1) * RECORDS_PER_PAGE;
-  const endIndex = startIndex + RECORDS_PER_PAGE;
-  const currentRecords = records.slice(startIndex, endIndex);
+
+  const currentRecords = useMemo(() => {
+    const startIndex = (currentPage - 1) * RECORDS_PER_PAGE;
+    return records.slice(startIndex, startIndex + RECORDS_PER_PAGE);
+  }, [records, currentPage]);
 
   const handleNextPage = () => {
     if (currentPage < totalPages) {
@@ -227,7 +228,7 @@ export default function AdminDashboard() {
               variant="outline"
               size="sm"
               onClick={handleNextPage}
-              disabled={currentPage === totalPages || totalPages === 0}
+              disabled={currentPage >= totalPages}
             >
               Next
               <ArrowRight className="ml-2 h-4 w-4" />
