@@ -48,6 +48,9 @@ export default function VerificationStep({ onVerified, isSubmitting, onBack }: V
 
       const context = canvas.getContext("2d");
       if (context) {
+        // Flip the image horizontally for a mirror effect
+        context.translate(canvas.width, 0);
+        context.scale(-1, 1);
         context.drawImage(video, 0, 0, canvas.width, canvas.height);
         const dataUrl = canvas.toDataURL("image/jpeg", 0.8);
         onVerified(dataUrl);
@@ -62,32 +65,22 @@ export default function VerificationStep({ onVerified, isSubmitting, onBack }: V
   const setupCamera = useCallback(async (isRetry = false) => {
       if (isRetry) playSound('click');
       setStatus("initializing");
-      
-      if (videoRef.current && videoRef.current.srcObject) {
-         (videoRef.current.srcObject as MediaStream).getTracks().forEach(track => track.stop());
-      }
 
       try {
         const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' } });
-        
         if (videoRef.current) {
-          videoRef.current.srcObject = stream;
-          await new Promise((resolve) => {
-            if (videoRef.current) {
-              videoRef.current.onloadedmetadata = () => {
-                videoRef.current?.play();
-                resolve(null);
-              };
-            }
-          });
+            videoRef.current.srcObject = stream;
+            videoRef.current.onloadedmetadata = () => {
+                videoRef.current?.play().catch(e => {
+                    console.error("Video play failed:", e);
+                    setStatus("error");
+                });
+                setStatus("ready");
+            };
         }
-        
-        setStatus("ready");
-
       } catch (error) {
-        const err = error as Error;
-        console.error("Setup failed:", err);
-        if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
+        console.error("Camera setup failed:", error);
+        if (error instanceof Error && (error.name === 'NotAllowedError' || error.name === 'PermissionDeniedError')) {
             setStatus("permission_denied");
         } else {
             setStatus("error");
@@ -99,6 +92,7 @@ export default function VerificationStep({ onVerified, isSubmitting, onBack }: V
   useEffect(() => {
     setupCamera();
     return () => {
+      // Stop all video tracks when the component unmounts
       if (videoRef.current && videoRef.current.srcObject) {
         const stream = videoRef.current.srcObject as MediaStream;
         stream.getTracks().forEach(track => track.stop());
@@ -149,7 +143,6 @@ export default function VerificationStep({ onVerified, isSubmitting, onBack }: V
     }
   }
 
-
   return (
     <>
       <CardHeader>
@@ -160,7 +153,7 @@ export default function VerificationStep({ onVerified, isSubmitting, onBack }: V
         <div className="relative aspect-video w-full overflow-hidden rounded-lg border-2 border-dashed bg-muted">
             <video
                 ref={videoRef}
-                className={`h-full w-full object-cover scale-x-[-1] transition-opacity duration-300 ${status !== 'initializing' ? 'opacity-100' : 'opacity-0'}`}
+                className={`h-full w-full object-cover scale-x-[-1] transition-opacity duration-300 ${status === 'ready' ? 'opacity-100' : 'opacity-0'}`}
                 autoPlay
                 muted
                 playsInline
