@@ -35,7 +35,7 @@ import {
   Ban,
   Smartphone,
   Sparkles,
-  Face,
+  Smile,
   UserCheck,
 } from "lucide-react";
 import { useGeolocator } from "@/hooks/use-geolocator";
@@ -392,7 +392,7 @@ export default function AttendancePage() {
               ) : faceDetected ? (
                   <Badge variant="default" className="bg-green-600"><UserCheck className="mr-2 h-3 w-3"/>Face Detected</Badge>
               ) : (
-                  <Badge variant="destructive"><Face className="mr-2 h-3 w-3"/>No Face Detected</Badge>
+                  <Badge variant="destructive"><Smile className="mr-2 h-3 w-3"/>No Face Detected</Badge>
               )}
            </div>
         )}
