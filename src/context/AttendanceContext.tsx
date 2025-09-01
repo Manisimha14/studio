@@ -31,7 +31,6 @@ export interface AttendanceRecord {
   photo: string | null;
   floorNumber: string;
   deviceId: string;
-  livenessChallenge: string;
 }
 
 interface NewRecord {
@@ -43,7 +42,6 @@ interface NewRecord {
     };
     photo: string;
     deviceId: string;
-    livenessChallenge: string;
 }
 
 interface AttendanceContextType {
@@ -152,7 +150,7 @@ export function AttendanceProvider({ children }: { children: ReactNode }) {
     return () => unsubscribe();
   }, []);
 
-  const addRecord = async ({ studentName, floorNumber, location, photo, deviceId, livenessChallenge }: NewRecord) => {
+  const addRecord = async ({ studentName, floorNumber, location, photo, deviceId }: NewRecord) => {
     const attendanceRef = ref(db, 'attendance');
     
     const today = new Date();
@@ -181,7 +179,6 @@ export function AttendanceProvider({ children }: { children: ReactNode }) {
       location,
       photo,
       deviceId,
-      livenessChallenge,
       timestamp: serverTimestamp(),
     };
     await push(attendanceRef, newRecordPayload);

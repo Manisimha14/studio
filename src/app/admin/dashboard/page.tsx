@@ -18,7 +18,7 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Users, Trash2, Loader2, ListX, ArrowDown, Sparkles } from "lucide-react";
+import { Users, Trash2, Loader2, ListX, ArrowDown } from "lucide-react";
 import Image from "next/image";
 import { useState, useEffect, useCallback } from "react";
 import { useAttendance } from "@/context/AttendanceContext";
@@ -41,7 +41,6 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { format } from 'date-fns';
 import { playSound } from "@/lib/utils";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
 
 export default function AdminDashboard() {
@@ -159,15 +158,6 @@ export default function AdminDashboard() {
                                 height={600}
                                 className="w-full rounded-lg"
                               />
-                               {record.livenessChallenge && (
-                                <Alert className="mt-4">
-                                  <Sparkles className="h-4 w-4" />
-                                  <AlertTitle>Liveness Challenge</AlertTitle>
-                                  <AlertDescription>
-                                    Admin, please verify if the student is performing this action: <strong>{record.livenessChallenge}</strong>
-                                  </AlertDescription>
-                                </Alert>
-                              )}
                             </DialogContent>
                           </Dialog>
                         ) : (

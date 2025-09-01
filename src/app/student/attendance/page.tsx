@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useState, useMemo, Suspense, lazy, useEffect } from "react";
+import { useState, Suspense, lazy, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import {
@@ -51,13 +51,6 @@ const getDeviceId = () => {
   return deviceId;
 };
 
-const LIVENESS_CHALLENGES = [
-    { action: "Smile for the camera", key: "smile" },
-    { action: "Open your mouth", key: "mouthOpen" },
-    { action: "Blink your left eye", key: "eyeBlinkLeft" },
-    { action: "Blink your right eye", key: "eyeBlinkRight" },
-];
-
 export default function AttendancePage() {
   const { addRecord } = useAttendance();
   const { toast } = useToast();
@@ -69,8 +62,6 @@ export default function AttendancePage() {
   const [studentName, setStudentName] = useState("");
   const [floorNumber, setFloorNumber] = useState("");
   const [deviceId, setDeviceId] = useState('');
-
-  const livenessChallenge = useMemo(() => LIVENESS_CHALLENGES[Math.floor(Math.random() * LIVENESS_CHALLENGES.length)], []);
 
   useEffect(() => {
     // This hook runs only on the client, after hydration
@@ -123,7 +114,6 @@ export default function AttendancePage() {
           location: location!, 
           photo: snapshot,
           deviceId: deviceId,
-          livenessChallenge: livenessChallenge.action
         });
         playSound('success');
         setStep(3); // Go to success step
@@ -264,7 +254,7 @@ export default function AttendancePage() {
             </CardContent>
             <CardFooter>
                  <Button onClick={handleProceedToVerification} disabled={!location || isSubmitting || !studentName || !floorNumber} className="w-full py-6 text-lg font-semibold transition-all hover:scale-105 active-scale-100">
-                    Next: Liveness Check
+                    Next: Take Snapshot
                  </Button>
             </CardFooter>
             </>
@@ -274,11 +264,10 @@ export default function AttendancePage() {
           <Suspense fallback={
               <CardContent className="flex flex-col items-center justify-center space-y-4 p-8 min-h-[400px]">
                 <Loader2 className="h-10 w-10 animate-spin text-primary" />
-                <p className="text-muted-foreground">Loading Verification Module...</p>
+                <p className="text-muted-foreground">Loading Camera...</p>
               </CardContent>
           }>
             <VerificationStep
-              livenessChallenge={livenessChallenge}
               onVerified={handleMarkAttendance}
               isSubmitting={isSubmitting}
               onBack={() => setStep(1)}
