@@ -32,6 +32,7 @@ import {
   AlertTriangle,
   RefreshCw,
   ArrowLeft,
+  Ban,
 } from "lucide-react";
 import { useGeolocator } from "@/hooks/use-geolocator";
 import useSound from "use-sound";
@@ -49,6 +50,7 @@ export default function AttendancePage() {
   const [snapshot, setSnapshot] = useState<string | null>(null);
   const [studentName, setStudentName] = useState("");
   const [floorNumber, setFloorNumber] = useState("");
+  const [virtualCameraDetected, setVirtualCameraDetected] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
@@ -58,7 +60,28 @@ export default function AttendancePage() {
   const [playCapture] = useSound('/sounds/capture.mp3', { volume: 0.5 });
   
   const getCameraPermission = async () => {
+    setVirtualCameraDetected(false);
     try {
+       const devices = await navigator.mediaDevices.enumerateDevices();
+       const videoInputs = devices.filter(device => device.kind === 'videoinput');
+       
+       const suspiciousKeywords = ['obs', 'virtual', 'droidcam', 'splitcam'];
+       const isVirtualCamera = videoInputs.some(device => 
+         suspiciousKeywords.some(keyword => device.label.toLowerCase().includes(keyword))
+       );
+
+       if (isVirtualCamera) {
+          setVirtualCameraDetected(true);
+          setHasCameraPermission(false);
+          playError();
+          toast({
+            variant: 'destructive',
+            title: 'Virtual Camera Detected',
+            description: 'Please use a genuine physical webcam for attendance.',
+          });
+          return;
+       }
+
       const stream = await navigator.mediaDevices.getUserMedia({ video: true });
       setHasCameraPermission(true);
       if (videoRef.current) {
@@ -68,11 +91,13 @@ export default function AttendancePage() {
       console.error("Error accessing camera:", error);
       setHasCameraPermission(false);
       playError();
-      toast({
-        variant: 'destructive',
-        title: 'Camera Access Denied',
-        description: 'Please enable camera permissions in your browser settings.',
-      });
+      if ((error as Error).name !== 'NotAllowedError') {
+        toast({
+            variant: 'destructive',
+            title: 'Camera Access Denied',
+            description: 'Please enable camera permissions in your browser settings.',
+        });
+      }
     }
   };
 
@@ -304,8 +329,16 @@ export default function AttendancePage() {
                     playsInline
                 />
                 <canvas ref={canvasRef} className="hidden" />
+                 
+                {virtualCameraDetected && (
+                   <Alert variant="destructive" className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-center">
+                        <Ban className="h-10 w-10" />
+                        <AlertTitle>Virtual Camera Detected</AlertTitle>
+                        <AlertDescription>Please use a physical webcam and refresh the page.</AlertDescription>
+                    </Alert>
+                )}
 
-                {hasCameraPermission === false && (
+                {hasCameraPermission === false && !virtualCameraDetected && (
                     <Alert variant="destructive" className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-center">
                         <VideoOff className="h-10 w-10" />
                         <AlertTitle>Camera Access Denied</AlertTitle>
@@ -333,7 +366,7 @@ export default function AttendancePage() {
                 <Button
                     onClick={handleCapture}
                     disabled={!!snapshot || !hasCameraPermission || isFormDisabled}
-                    className="flex-1 transition-all hover:scale-105 active:scale-100"
+                    className="flex-1 transition-all hover:scale-105 active-scale-100"
                 >
                     <Camera className="mr-2" />
                     {snapshot ? "Snapshot Taken" : "Take Snapshot"}
