@@ -59,12 +59,12 @@ const PAGE_SIZE = 10;
 
 export function AttendanceProvider({ children }: { children: ReactNode }) {
   const [paginatedRecords, setPaginatedRecords] = useState<AttendanceRecord[]>([]);
+  const [allRecords, setAllRecords] = useState<AttendanceRecord[]>([]);
   const [allRecordsCount, setAllRecordsCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(true);
-  const [lastKey, setLastKey] = useState<number | null>(null);
-
+  
   const processSnapshot = (snapshot: any) => {
       const data = snapshot.val();
       if (!data) {
@@ -78,82 +78,47 @@ export function AttendanceProvider({ children }: { children: ReactNode }) {
           .sort((a, b) => b.timestamp - a.timestamp);
   }
 
-  const fetchInitialRecords = useCallback(async () => {
-    setLoading(true);
-    const attendanceRef = ref(db, 'attendance');
-    const initialQuery = query(attendanceRef, orderByChild('timestamp'), limitToLast(PAGE_SIZE));
+  const fetchInitialRecords = useCallback(() => {
+     setLoading(true);
+     const paginated = allRecords.slice(0, PAGE_SIZE);
+     setPaginatedRecords(paginated);
+     setHasMore(allRecords.length > PAGE_SIZE);
+     setLoading(false);
+  }, [allRecords]);
 
-    try {
-        const snapshot = await get(initialQuery);
-        const loadedRecords = processSnapshot(snapshot);
-        
-        setPaginatedRecords(loadedRecords);
-        if (loadedRecords.length > 0) {
-            setLastKey(loadedRecords[loadedRecords.length - 1].timestamp);
-        }
-        setHasMore(loadedRecords.length === PAGE_SIZE);
-    } catch (error) {
-        console.error("Error fetching initial records: ", error);
-    } finally {
-        setLoading(false);
-    }
-  }, []);
 
-  const fetchMoreRecords = useCallback(async () => {
-    if (!hasMore || loadingMore || !lastKey) return;
+  const fetchMoreRecords = useCallback(() => {
+    if (!hasMore || loadingMore) return;
     
     setLoadingMore(true);
-    const attendanceRef = ref(db, 'attendance');
-    const moreQuery = query(
-      attendanceRef, 
-      orderByChild('timestamp'), 
-      endBefore(lastKey), 
-      limitToLast(PAGE_SIZE)
-    );
+    const currentLength = paginatedRecords.length;
+    const nextRecords = allRecords.slice(currentLength, currentLength + PAGE_SIZE);
+    
+    setPaginatedRecords(prev => [...prev, ...nextRecords]);
+    setHasMore(allRecords.length > currentLength + PAGE_SIZE);
 
-    try {
-        const snapshot = await get(moreQuery);
-        const newRecords = processSnapshot(snapshot);
-
-        if (newRecords.length > 0) {
-            setLastKey(newRecords[newRecords.length - 1].timestamp);
-            setPaginatedRecords(prev => [...prev, ...newRecords]);
-        }
-        setHasMore(newRecords.length === PAGE_SIZE);
-    } catch (error) {
-        console.error("Error fetching more records: ", error);
-    } finally {
-        setLoadingMore(false);
-    }
-  }, [hasMore, loadingMore, lastKey]);
+    setLoadingMore(false);
+  }, [hasMore, loadingMore, paginatedRecords.length, allRecords]);
 
 
   useEffect(() => {
-    // Listener for the total count of records
+    setLoading(true);
     const attendanceRef = ref(db, 'attendance');
-    const unsubscribeCount = onValue(attendanceRef, (snapshot) => {
-       setAllRecordsCount(snapshot.size);
+    const recordsQuery = query(attendanceRef, orderByChild('timestamp'));
+    
+    const unsubscribe = onValue(recordsQuery, (snapshot) => {
+        const fullList = processSnapshot(snapshot);
+        setAllRecords(fullList);
+        setAllRecordsCount(fullList.length);
+        
+        const paginated = fullList.slice(0, paginatedRecords.length || PAGE_SIZE);
+        setPaginatedRecords(paginated);
+        setHasMore(fullList.length > paginated.length);
+        setLoading(false);
     });
 
-    fetchInitialRecords();
-
-    // Listener for real-time additions (prepends to the list)
-    const newRecordsQuery = query(attendanceRef, orderByChild('timestamp'), limitToLast(1));
-    const unsubscribeNew = onValue(newRecordsQuery, (snapshot) => {
-        const newRecord = processSnapshot(snapshot);
-        if (newRecord.length > 0 && !paginatedRecords.some(r => r.id === newRecord[0].id)) {
-            // This is a naive way to handle real-time updates with pagination.
-            // For a production app, a more sophisticated approach would be needed.
-            // For now, we prepend if it's not already there.
-            setPaginatedRecords(prev => [newRecord[0], ...prev.filter(p => p.id !== newRecord[0].id)]);
-        }
-    });
-
-    return () => {
-        unsubscribeCount();
-        unsubscribeNew();
-    };
-  }, [fetchInitialRecords]);
+    return () => unsubscribe();
+  }, [paginatedRecords.length]);
 
   const addRecord = async ({ studentName, floorNumber, location, photo }: NewRecord) => {
     const attendanceRef = ref(db, 'attendance');
@@ -170,8 +135,6 @@ export function AttendanceProvider({ children }: { children: ReactNode }) {
   const removeRecord = async (id: string) => {
     const recordRef = ref(db, `attendance/${id}`);
     await remove(recordRef);
-    // Optimistically update UI
-    setPaginatedRecords(prev => prev.filter(r => r.id !== id));
   };
 
   return (
