@@ -31,8 +31,11 @@ import {
   Building,
   AlertTriangle,
   RefreshCw,
+  ArrowLeft,
 } from "lucide-react";
 import { useGeolocator } from "@/hooks/use-geolocator";
+import useSound from "use-sound";
+
 
 export default function AttendancePage() {
   const { addRecord } = useAttendance();
@@ -48,6 +51,11 @@ export default function AttendancePage() {
   const [floorNumber, setFloorNumber] = useState("");
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+
+  const [playClick] = useSound('/sounds/click.mp3', { volume: 0.5 });
+  const [playSuccess] = useSound('/sounds/success.mp3', { volume: 0.5 });
+  const [playError] = useSound('/sounds/error.mp3', { volume: 0.5 });
+  const [playCapture] = useSound('/sounds/capture.mp3', { volume: 0.5 });
   
   const getCameraPermission = async () => {
     try {
@@ -59,6 +67,7 @@ export default function AttendancePage() {
     } catch (error) {
       console.error("Error accessing camera:", error);
       setHasCameraPermission(false);
+      playError();
       toast({
         variant: 'destructive',
         title: 'Camera Access Denied',
@@ -81,6 +90,7 @@ export default function AttendancePage() {
 
 
   const handleCapture = () => {
+    playCapture();
     if (videoRef.current && canvasRef.current) {
       const video = videoRef.current;
       const canvas = canvasRef.current;
@@ -101,11 +111,14 @@ export default function AttendancePage() {
   };
 
   const handleRetake = () => {
+    playClick();
     setSnapshot(null);
   };
 
   const handleNextStep = () => {
+     playClick();
      if (!studentName || !floorNumber) {
+      playError();
       toast({
         variant: "destructive",
         title: "Missing Information",
@@ -114,6 +127,7 @@ export default function AttendancePage() {
       return;
     }
     if (!location) {
+      playError();
       toast({
         variant: "destructive",
         title: "Location Error",
@@ -126,7 +140,9 @@ export default function AttendancePage() {
 
 
   const handleMarkAttendance = async () => {
+    playClick();
     if (!snapshot) {
+        playError();
         toast({
             variant: "destructive",
             title: "Snapshot Required",
@@ -137,6 +153,7 @@ export default function AttendancePage() {
     setIsSubmitting(true);
     try {
         await addRecord({ studentName, floorNumber, location: location!, photo: snapshot });
+        playSuccess();
         setStep(3); // Move to success step
         toast({
           title: "Success!",
@@ -146,6 +163,7 @@ export default function AttendancePage() {
 
     } catch (error) {
         console.error("Error marking attendance:", error);
+        playError();
         toast({
             variant: "destructive",
             title: "Submission Failed",
@@ -179,11 +197,11 @@ export default function AttendancePage() {
       case 'success':
         if (location) {
           return (
-            <Alert>
-              <MapPin className="h-4 w-4" />
+            <Alert variant="default" className="border-green-500/50 bg-green-500/10 text-green-700">
+              <MapPin className="h-4 w-4 text-green-600" />
               <AlertTitle>Location Acquired</AlertTitle>
               <AlertDescription>
-                  Lat: {location.latitude.toFixed(4)}, Long: {location.longitude.toFixed(4)}
+                  Your location is locked and ready.
               </AlertDescription>
             </Alert>
           );
@@ -196,16 +214,16 @@ export default function AttendancePage() {
   
   if (step === 3) {
       return (
-           <div className="flex items-start justify-center py-8">
+           <div className="flex items-start justify-center py-8 fade-in">
               <Card className="w-full max-w-lg text-center shadow-lg">
                 <CardHeader>
-                    <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-green-100">
-                        <CheckCircle className="h-12 w-12 text-green-600" />
+                    <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-green-100 dark:bg-green-900/50">
+                        <CheckCircle className="h-12 w-12 text-green-600 dark:text-green-400" />
                     </div>
                 </CardHeader>
                 <CardContent>
                     <CardTitle className="text-3xl font-bold">Attendance Marked!</CardTitle>
-                    <CardDescription className="mt-2 text-lg">
+                    <CardDescription className="mt-2 text-lg text-muted-foreground">
                         You will be redirected to the home page shortly.
                     </CardDescription>
                 </CardContent>
@@ -216,8 +234,8 @@ export default function AttendancePage() {
 
 
   return (
-    <div className="flex items-start justify-center py-8">
-      <Card className="w-full max-w-lg shadow-lg">
+    <div className="flex items-start justify-center py-8 fade-in">
+      <Card className="w-full max-w-lg shadow-xl transition-all">
         <CardHeader>
           <CardTitle className="text-3xl font-bold">
             {step === 1 ? "Mark Your Attendance" : "Take a Snapshot"}
@@ -241,6 +259,7 @@ export default function AttendancePage() {
                     onChange={(e) => setStudentName(e.target.value)}
                     placeholder="e.g., Jane Doe"
                     disabled={isFormDisabled}
+                    className="text-base"
                 />
                 </div>
                 <div className="space-y-2">
@@ -253,6 +272,7 @@ export default function AttendancePage() {
                     onChange={(e) => setFloorNumber(e.target.value)}
                     placeholder="e.g., 4th Floor"
                     disabled={isFormDisabled}
+                    className="text-base"
                 />
                 </div>
             </div>
@@ -265,7 +285,7 @@ export default function AttendancePage() {
             </div>
             </CardContent>
             <CardFooter>
-                 <Button onClick={handleNextStep} disabled={!location || isFormDisabled} className="w-full py-6 text-lg">
+                 <Button onClick={handleNextStep} disabled={!location || isFormDisabled} className="w-full py-6 text-lg font-semibold transition-all hover:scale-105 active:scale-100">
                     Next: Take Snapshot
                  </Button>
             </CardFooter>
@@ -278,7 +298,7 @@ export default function AttendancePage() {
                 <div className="relative aspect-video w-full overflow-hidden rounded-lg border-2 border-dashed bg-muted">
                 <video
                     ref={videoRef}
-                    className={`h-full w-full object-cover ${snapshot ? 'hidden' : ''}`}
+                    className={`h-full w-full object-cover transition-opacity duration-300 ${snapshot ? 'opacity-0' : 'opacity-100'}`}
                     autoPlay
                     muted
                     playsInline
@@ -296,7 +316,7 @@ export default function AttendancePage() {
                  {hasCameraPermission === null && !snapshot && (
                     <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 p-4 text-center">
                         <p className="text-muted-foreground">The app needs camera access to take a snapshot.</p>
-                        <Button onClick={getCameraPermission}><Camera className="mr-2"/>Enable Camera</Button>
+                        <Button onClick={() => { playClick(); getCameraPermission(); }}><Camera className="mr-2"/>Enable Camera</Button>
                     </div>
                 )}
 
@@ -313,13 +333,13 @@ export default function AttendancePage() {
                 <Button
                     onClick={handleCapture}
                     disabled={!!snapshot || !hasCameraPermission || isFormDisabled}
-                    className="flex-1"
+                    className="flex-1 transition-all hover:scale-105 active:scale-100"
                 >
                     <Camera className="mr-2" />
                     {snapshot ? "Snapshot Taken" : "Take Snapshot"}
                 </Button>
                 {snapshot && (
-                    <Button onClick={handleRetake} variant="outline" disabled={isFormDisabled}>
+                    <Button onClick={handleRetake} variant="outline" disabled={isFormDisabled} className="transition-all hover:scale-105 active:scale-100">
                         <RefreshCw className="mr-2" />
                         Retake
                     </Button>
@@ -330,7 +350,7 @@ export default function AttendancePage() {
                 <Button
                     onClick={handleMarkAttendance}
                     disabled={isFormDisabled || !snapshot}
-                    className="w-full py-6 text-lg font-bold"
+                    className="w-full py-6 text-lg font-bold transition-all hover:scale-105 active:scale-100"
                 >
                     {isSubmitting ? (
                     <Loader2 className="mr-2 h-5 w-5 animate-spin" />
@@ -339,7 +359,8 @@ export default function AttendancePage() {
                     )}
                     {isSubmitting ? "Submitting..." : "Submit Attendance"}
                 </Button>
-                 <Button variant="link" onClick={() => setStep(1)} disabled={isFormDisabled}>
+                 <Button variant="link" onClick={() => { playClick(); setStep(1); }} disabled={isFormDisabled}>
+                     <ArrowLeft className="mr-2" />
                      Go Back
                  </Button>
             </CardFooter>

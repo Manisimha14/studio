@@ -35,6 +35,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
 import { format } from 'date-fns';
+import useSound from "use-sound";
 
 
 const RECORDS_PER_PAGE = 5;
@@ -46,6 +47,11 @@ export default function AdminDashboard() {
   
   const [recordToDelete, setRecordToDelete] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+
+  const [playClick] = useSound('/sounds/click.mp3', { volume: 0.5 });
+  const [playDelete] = useSound('/sounds/delete.mp3', { volume: 0.4 });
+  const [playSuccess] = useSound('/sounds/success.mp3', { volume: 0.5 });
+  const [playError] = useSound('/sounds/error.mp3', { volume: 0.5 });
 
   // Reset to page 1 if records change
   useEffect(() => {
@@ -60,31 +66,35 @@ export default function AdminDashboard() {
   }, [records, currentPage]);
 
   const handleNextPage = () => {
+    playClick();
     if (currentPage < totalPages) {
       setCurrentPage(currentPage + 1);
     }
   };
 
   const handlePrevPage = () => {
+    playClick();
     if (currentPage > 1) {
       setCurrentPage(currentPage - 1);
     }
   };
   
   const handleDelete = async () => {
+    playDelete();
     if (recordToDelete !== null) {
       setIsDeleting(true);
       try {
         await removeRecord(recordToDelete);
+        playSuccess();
         toast({
           title: "Record Deleted",
           description: "The attendance record has been successfully deleted.",
         });
-        // If it was the last record on the page, and not page 1, go back.
         if (currentRecords.length === 1 && currentPage > 1) {
             setCurrentPage(currentPage - 1);
         }
       } catch (error) {
+        playError();
         toast({
             variant: "destructive",
             title: "Deletion Failed",
@@ -99,7 +109,7 @@ export default function AdminDashboard() {
 
 
   return (
-    <Card className="w-full max-w-4xl">
+    <Card className="w-full max-w-4xl fade-in shadow-xl">
       <CardHeader className="flex flex-row items-center justify-between">
         <div>
           <CardTitle>Live Attendance Records</CardTitle>
@@ -115,7 +125,7 @@ export default function AdminDashboard() {
         </div>
       </CardHeader>
       <CardContent>
-        <div className="overflow-x-auto">
+        <div className="overflow-x-auto rounded-lg border">
             <Table>
               <TableHeader>
                 <TableRow>
@@ -130,7 +140,7 @@ export default function AdminDashboard() {
               <TableBody>
                 {loading ? (
                     <TableRow>
-                        <TableCell colSpan={6} className="h-32 text-center">
+                        <TableCell colSpan={6} className="h-48 text-center">
                             <div className="flex flex-col items-center gap-2 text-muted-foreground">
                                 <Loader2 className="h-8 w-8 animate-spin" />
                                 <span>Waiting for attendance records...</span>
@@ -139,7 +149,7 @@ export default function AdminDashboard() {
                     </TableRow>
                 ) : records.length === 0 ? (
                     <TableRow>
-                        <TableCell colSpan={6} className="h-32 text-center">
+                        <TableCell colSpan={6} className="h-48 text-center">
                             <div className="flex flex-col items-center gap-2 text-muted-foreground">
                                 <ListX className="h-8 w-8" />
                                 <span>No attendance records found.</span>
@@ -148,7 +158,7 @@ export default function AdminDashboard() {
                     </TableRow>
                 ) : currentRecords.length > 0 ? (
                   currentRecords.map((record) => (
-                    <TableRow key={record.id}>
+                    <TableRow key={record.id} className="transition-colors hover:bg-muted/50">
                       <TableCell>
                         {record.photo ? (
                           <Image
@@ -156,7 +166,7 @@ export default function AdminDashboard() {
                             alt={`Snapshot of ${record.studentName}`}
                             width={64}
                             height={64}
-                            className="h-16 w-16 rounded-md object-cover"
+                            className="h-16 w-16 rounded-md object-cover transition-transform hover:scale-110"
                           />
                         ) : (
                           "No Photo"
@@ -180,7 +190,7 @@ export default function AdminDashboard() {
                             <Button
                               variant="destructive"
                               size="sm"
-                              onClick={() => setRecordToDelete(record.id)}
+                              onClick={() => { playClick(); setRecordToDelete(record.id); }}
                               disabled={isDeleting}
                             >
                               <Trash2 className="mr-2 h-4 w-4" />
