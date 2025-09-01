@@ -59,7 +59,7 @@ const useGeolocator = (options?: PositionOptions): GeolocationResult => {
     // Added a timeout to avoid getting stuck.
     navigator.geolocation.getCurrentPosition(successHandler, errorHandler, {
       ...options,
-      timeout: 10000, // 10 seconds
+      timeout: 15000, // 15 seconds
     });
 
   }, [options]);
