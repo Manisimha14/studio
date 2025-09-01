@@ -45,6 +45,7 @@ import {
   FilesetResolver,
   FaceLandmarkerResult,
 } from "@mediapipe/tasks-vision";
+import { Badge } from "@/components/ui/badge";
 
 // Simple UUID generator
 const getDeviceId = () => {
