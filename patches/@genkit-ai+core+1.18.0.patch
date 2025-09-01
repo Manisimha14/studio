@@ -1,14 +1,48 @@
 diff --git a/node_modules/@genkit-ai/core/package.json b/node_modules/@genkit-ai/core/package.json
-index 52a1334..81119b9 100644
+index 58c9735..5d8719f 100644
 --- a/node_modules/@genkit-ai/core/package.json
 +++ b/node_modules/@genkit-ai/core/package.json
-@@ -62,9 +62,5 @@
+@@ -62,7 +62,6 @@
+     "typescript": ">= 5.2.2"
+   },
+   "peerDependencies": {
+-    "genkit": "^1.18.0",
+     "zod": ">= 3.22.4"
+   },
    "peerDependenciesMeta": {
-     "@genkit-ai/firebase": {
-       "optional": true
--    },
--    "genkit": {
--      "optional": true
-     }
-   }
- }
+diff --git a/node_modules/@genkit-ai/core/src/index.ts b/node_modules/@genkit-ai/core/src/index.ts
+index e56d56d..e480436 100644
+--- a/node_modules/@genkit-ai/core/src/index.ts
++++ b/node_modules/@genkit-ai/core/src/index.ts
+@@ -28,7 +28,6 @@
+ 
+ import { genkitEval } from './eval.js';
+ import { GenkitError } from './errors.js';
+-import { registerPlugin } from './plugins.js';
+ import { LookupAction, RenderAction } from './runner.js';
+ import { telemetry } from './telemetry.js';
+ import { Context, run } from './tracing.js';
+@@ -52,14 +51,13 @@
+   defineFlow,
+   Flow,
+ } from './flow.js';
+-import { Genkit as GenkitExport, genkit } from './genkit.js';
++import { genkit } from './genkit.js';
+ import { generate } from './generate.js';
+ import { instrument } from './instrumentation.js';
+ import { logger, log, LogLevel } from './logging.js';
+ import { getMemory, setMemory } from './memory.js';
+ import { Prompt, prompt } from './prompt.js';
+ import { getRetriever, setRetriever } from './retriever.js';
+-export { GenkitExport as Genkit, genkit };
+ 
+ // TODO: Remove this once we migrate all plugins.
+ const core = {
+@@ -93,7 +91,6 @@
+   run,
+   telemetry,
+   generate,
+-  registerPlugin,
+   log,
+   logger,
+   LogLevel,

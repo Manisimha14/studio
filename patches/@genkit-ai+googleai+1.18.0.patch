@@ -1,15 +1,46 @@
 diff --git a/node_modules/@genkit-ai/googleai/package.json b/node_modules/@genkit-ai/googleai/package.json
-index 983193e..f2c7333 100644
---- a/node_modules/@genkit-ai/googleai/package.json
-+++ b/node_modules/@genkit-ai/googleai/package.json
-@@ -29,9 +29,6 @@
-     "zod": "^3.22.4"
+index 3b7c843..70a8d7a 100644
+--- a "node_modules/@genkit-ai/googleai/package.json"
++++ b "node_modules/@genkit-ai/googleai/package.json"
+@@ -52,7 +52,6 @@
    },
    "peerDependencies": {
--    "genkit": "^1.18.0"
--  },
--  "peerDependenciesMeta": {
-     "firebase-functions": {
-       "optional": true
-     },
-
+     "@genkit-ai/core": "^1.18.0",
+-    "genkit": "^1.18.0",
+     "zod": "^3.22.4"
+   }
+ }
+diff --git a/node_modules/@genkit-ai/googleai/src/index.ts b/node_modules/@genkit-ai/googleai/src/index.ts
+index c6b92a2..68c4af3 100644
+--- a/node_modules/@genkit-ai/googleai/src/index.ts
++++ b/node_modules/@genkit-ai/googleai/src/index.ts
+@@ -16,7 +16,7 @@
+  */
+ 
+ import {
+-  genkit,
++  ai,
+   declare,
+   defineConfig,
+   Plugin,
+@@ -87,7 +87,7 @@
+     return;
+   }
+ 
+-  genkit.registerPlugin('google-ai', googleAI(options));
++  ai.registerPlugin('google-ai', googleAI(options));
+ }
+ 
+ export {
+diff --git a/node_modules/@genkit-ai/googleai/src/plugin.ts b/node_modules/@genkit-ai/googleai/src/plugin.ts
+index e51e411..65126d4 100644
+--- a/node_modules/@genkit-ai/googleai/src/plugin.ts
++++ b/node_modules/@genkit-ai/googleai/src/plugin.ts
+@@ -20,7 +20,6 @@
+   defineModel,
+   GENKIT_CLIENT_HEADER,
+   ModelAction,
+-  registerPlugin,
+   Telemetry,
+ } from '@genkit-ai/core';
+ import { lookupAction } from '@genkit-ai/core/registry';
