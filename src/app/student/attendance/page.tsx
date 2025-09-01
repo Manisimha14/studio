@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useState, useRef, useEffect, useCallback, useMemo } from "react";
+import { useState, useMemo, Suspense, lazy } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import {
@@ -24,28 +24,18 @@ import {
 import {
   Loader2,
   MapPin,
-  Camera,
   CheckCircle,
-  VideoOff,
   User,
   Building,
   AlertTriangle,
-  RefreshCw,
-  ArrowLeft,
-  Ban,
   Smartphone,
-  Sparkles,
-  Smile,
-  UserCheck,
+  ArrowLeft,
 } from "lucide-react";
 import { useGeolocator } from "@/hooks/use-geolocator";
 import { playSound } from "@/lib/utils";
-import {
-  FaceLandmarker,
-  FilesetResolver,
-  FaceLandmarkerResult,
-} from "@mediapipe/tasks-vision";
-import { Badge } from "@/components/ui/badge";
+
+// Lazy load the heavy verification component
+const VerificationStep = lazy(() => import('./VerificationStep'));
 
 // Simple UUID generator
 const getDeviceId = () => {
@@ -68,229 +58,25 @@ const LIVENESS_CHALLENGES = [
     { action: "Blink your right eye", key: "eyeBlinkRight" },
 ];
 
-let faceLandmarker: FaceLandmarker | undefined;
-let lastVideoTime = -1;
-const BLENDSHAPE_THRESHOLD = 0.5;
-
 export default function AttendancePage() {
   const { addRecord } = useAttendance();
   const { toast } = useToast();
   const router = useRouter();
   const { location, error, status } = useGeolocator({ enableHighAccuracy: true });
   
-  const [step, setStep] = useState(1); // 1: Form, 2: Liveness, 3: Snapshot, 4: Success
+  const [step, setStep] = useState(1); // 1: Form, 2: Verification
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [hasCameraPermission, setHasCameraPermission] = useState<boolean | null>(null);
-  const [snapshot, setSnapshot] = useState<string | null>(null);
   const [studentName, setStudentName] = useState("");
   const [floorNumber, setFloorNumber] = useState("");
   const [deviceId, setDeviceId] = useState('');
-  const [virtualCameraDetected, setVirtualCameraDetected] = useState(false);
-  const [faceDetected, setFaceDetected] = useState(false);
-  const [isMediaPipeLoading, setIsMediaPipeLoading] = useState(true);
-  const [livenessChallengeMet, setLivenessChallengeMet] = useState(false);
 
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const animationFrameId = useRef<number>();
-  
   const livenessChallenge = useMemo(() => LIVENESS_CHALLENGES[Math.floor(Math.random() * LIVENESS_CHALLENGES.length)], []);
 
-  useEffect(() => {
+  useState(() => {
     setDeviceId(getDeviceId());
-  }, []);
+  });
 
-  const createFaceLandmarker = useCallback(async () => {
-    try {
-        const filesetResolver = await FilesetResolver.forVisionTasks(
-          "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm"
-        );
-        faceLandmarker = await FaceLandmarker.createFromOptions(filesetResolver, {
-          baseOptions: {
-            modelAssetPath: `https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task`,
-            delegate: "GPU"
-          },
-          outputFaceBlendshapes: true,
-          runningMode: "VIDEO",
-          numFaces: 1
-        });
-        setIsMediaPipeLoading(false);
-    } catch(error) {
-        console.error("Error creating FaceLandmarker: ", error);
-        toast({
-          variant: "destructive",
-          title: "Face Detection Failed",
-          description: "Could not load the face detection model. Please refresh and try again.",
-        });
-    }
-  }, [toast]);
-  
-  const checkLiveness = useCallback((blendshapes: any[]) => {
-      if (!blendshapes || blendshapes.length === 0) return false;
-      const scores = blendshapes[0].scores;
-
-      switch(livenessChallenge.key) {
-          case 'smile':
-              return scores.find((s: any) => s.categoryName === 'mouthSmileLeft').score > BLENDSHAPE_THRESHOLD &&
-                     scores.find((s: any) => s.categoryName === 'mouthSmileRight').score > BLENDSHAPE_THRESHOLD;
-          case 'mouthOpen':
-              return scores.find((s: any) => s.categoryName === 'jawOpen').score > BLENDSHAPE_THRESHOLD;
-          case 'eyeBlinkLeft':
-              return scores.find((s: any) => s.categoryName === 'eyeBlinkLeft').score > BLENDSHAPE_THRESHOLD;
-          case 'eyeBlinkRight':
-              return scores.find((s: any) => s.categoryName === 'eyeBlinkRight').score > BLENDSHAPE_THRESHOLD;
-          default:
-              return false;
-      }
-  }, [livenessChallenge.key]);
-
-  const predictWebcam = useCallback(() => {
-    if (!videoRef.current || !faceLandmarker) {
-      return;
-    }
-    
-    const video = videoRef.current;
-    if (video.currentTime !== lastVideoTime) {
-      lastVideoTime = video.currentTime;
-      const results: FaceLandmarkerResult = faceLandmarker.detectForVideo(video, Date.now());
-      
-      if (results.faceLandmarks && results.faceLandmarks.length > 0) {
-        setFaceDetected(true);
-        if (step === 3) {
-            setLivenessChallengeMet(checkLiveness(results.faceBlendshapes));
-        }
-      } else {
-        setFaceDetected(false);
-        setLivenessChallengeMet(false);
-      }
-    }
-
-    animationFrameId.current = requestAnimationFrame(predictWebcam);
-  }, [step, checkLiveness]);
-  
-  const getCameraPermission = useCallback(async (isRetry = false) => {
-    if (isRetry) {
-        playSound('click');
-    }
-    setVirtualCameraDetected(false);
-    try {
-       const devices = await navigator.mediaDevices.enumerateDevices();
-       const videoInputs = devices.filter(device => device.kind === 'videoinput');
-       
-       if (videoInputs.length === 0) {
-         throw new Error("No camera found.");
-       }
-
-       const suspiciousKeywords = ['obs', 'droidcam', 'splitcam', 'vcam', 'virtual', 'proxy'];
-       const isVirtualCamera = videoInputs.some(device => 
-         suspiciousKeywords.some(keyword => device.label.toLowerCase().includes(keyword))
-       );
-       
-       const hasPhysicalCamera = videoInputs.some(device => 
-         !suspiciousKeywords.some(keyword => device.label.toLowerCase().includes(keyword))
-       );
-
-       if (isVirtualCamera && !hasPhysicalCamera) {
-          setVirtualCameraDetected(true);
-          setHasCameraPermission(false);
-          playSound('error');
-          toast({
-            variant: 'destructive',
-            title: 'Physical Webcam Required',
-            description: 'Use of virtual cameras is not allowed. Please connect a physical webcam.',
-            duration: 5000,
-          });
-          return;
-       }
-
-      const stream = await navigator.mediaDevices.getUserMedia({ video: {
-        facingMode: 'user'
-      } });
-      setHasCameraPermission(true);
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        videoRef.current.addEventListener('loadeddata', predictWebcam);
-      }
-    } catch (error) {
-      console.error("Error accessing camera:", error);
-      setHasCameraPermission(false);
-      playSound('error');
-      const err = error as Error;
-      if (err.name === 'NotAllowedError') {
-         toast({
-            variant: 'destructive',
-            title: 'Camera Access Denied',
-            description: 'Please enable camera permissions in your browser settings.',
-        });
-      } else {
-        toast({
-            variant: 'destructive',
-            title: 'Camera Error',
-            description: err.message || "Could not access the camera.",
-        });
-      }
-    }
-  }, [toast, predictWebcam]);
-  
-
-  useEffect(() => {
-    const isCameraStep = step === 2 || (step === 3 && !snapshot);
-    
-    if (isCameraStep) {
-        if (!faceLandmarker) {
-          createFaceLandmarker();
-        }
-        getCameraPermission();
-    }
-
-    return () => {
-       if (animationFrameId.current) {
-         cancelAnimationFrame(animationFrameId.current);
-       }
-      if (videoRef.current && videoRef.current.srcObject) {
-        const stream = videoRef.current.srcObject as MediaStream;
-        stream.getTracks().forEach(track => track.stop());
-      }
-    };
-  }, [step, snapshot, getCameraPermission, createFaceLandmarker]);
-
-
-  const handleCapture = useCallback(() => {
-    playSound('capture');
-    if (videoRef.current && canvasRef.current) {
-      const video = videoRef.current;
-      const canvas = canvasRef.current;
-      const targetWidth = 480;
-      const scale = targetWidth / video.videoWidth;
-      canvas.width = targetWidth;
-      canvas.height = video.videoHeight * scale;
-
-      const context = canvas.getContext("2d");
-      if (context) {
-        context.drawImage(video, 0, 0, canvas.width, canvas.height);
-        const dataUrl = canvas.toDataURL("image/jpeg", 0.8);
-        setSnapshot(dataUrl);
-        setFaceDetected(false); // Stop detection after capture
-        setLivenessChallengeMet(false);
-        if (animationFrameId.current) {
-          cancelAnimationFrame(animationFrameId.current);
-        }
-
-        const stream = video.srcObject as MediaStream;
-        if(stream) {
-          stream.getTracks().forEach(track => track.stop());
-        }
-      }
-    }
-  }, []);
-
-  const handleRetake = useCallback(() => {
-    playSound('click');
-    setSnapshot(null);
-    getCameraPermission(); // Re-request camera access
-  }, [getCameraPermission]);
-
-  const handleProceedToLiveness = useCallback(() => {
+  const handleProceedToVerification = () => {
      playSound('click');
      if (!studentName || !floorNumber) {
       playSound('error');
@@ -311,22 +97,16 @@ export default function AttendancePage() {
       return;
     }
     setStep(2);
-  }, [studentName, floorNumber, location, toast]);
+  };
 
-
-  const handleProceedToSnapshot = useCallback(() => {
-    playSound('click');
-    setStep(3);
-  }, []);
-
-  const handleMarkAttendance = useCallback(async () => {
+  const handleMarkAttendance = async (snapshot: string | null) => {
     playSound('click');
     if (!snapshot) {
         playSound('error');
         toast({
             variant: "destructive",
             title: "Snapshot Required",
-            description: "Please take a snapshot to continue.",
+            description: "Could not capture a snapshot.",
         });
         return;
     }
@@ -341,7 +121,7 @@ export default function AttendancePage() {
           livenessChallenge: livenessChallenge.action
         });
         playSound('success');
-        setStep(4);
+        setStep(3); // Go to success step
         toast({
           title: "Success!",
           description: "Thank you for marking the attendance.",
@@ -360,11 +140,9 @@ export default function AttendancePage() {
     } finally {
         setIsSubmitting(false);
     }
-  }, [snapshot, addRecord, studentName, floorNumber, location, toast, router, deviceId, livenessChallenge.action]);
+  };
 
-  const isFormDisabled = isSubmitting;
-
-  const renderLocationStatus = useCallback(() => {
+  const renderLocationStatus = () => {
     switch (status) {
       case 'pending':
         return (
@@ -398,74 +176,9 @@ export default function AttendancePage() {
       default:
         return null;
     }
-  }, [status, error, location]);
-  
-  const renderCameraView = useCallback(() => (
-    <div className="relative aspect-video w-full overflow-hidden rounded-lg border-2 border-dashed bg-muted">
-        <video
-            ref={videoRef}
-            className={`h-full w-full object-cover transition-opacity duration-300 ${hasCameraPermission && !snapshot ? 'opacity-100' : 'opacity-0'}`}
-            autoPlay
-            muted
-            playsInline
-        />
-        <canvas ref={canvasRef} className="hidden" />
-        
-        {step !== 1 && !snapshot && (
-           <div className="absolute bottom-2 right-2 z-10 flex gap-2">
-              {isMediaPipeLoading ? (
-                  <Badge variant="secondary"><Loader2 className="mr-2 h-3 w-3 animate-spin"/>Loading AI</Badge>
-              ) : faceDetected ? (
-                  <Badge variant="default" className="bg-green-600"><UserCheck className="mr-2 h-3 w-3"/>Face Detected</Badge>
-              ) : (
-                  <Badge variant="destructive"><Smile className="mr-2 h-3 w-3"/>No Face Detected</Badge>
-              )}
-               {step === 3 && faceDetected && (
-                 livenessChallengeMet ? (
-                     <Badge variant="default" className="bg-green-600"><Sparkles className="mr-2 h-3 w-3"/>Challenge Met!</Badge>
-                 ) : (
-                     <Badge variant="secondary"><Sparkles className="mr-2 h-3 w-3"/>Challenge Pending</Badge>
-                 )
-              )}
-           </div>
-        )}
-        
-        {virtualCameraDetected && (
-           <Alert variant="destructive" className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-center p-4">
-                <Ban className="h-10 w-10" />
-                <AlertTitle>Physical Webcam Required</AlertTitle>
-                <AlertDescription>The use of virtual camera software is not permitted. Please use a physical webcam.</AlertDescription>
-            </Alert>
-        )}
+  };
 
-        {hasCameraPermission === false && !virtualCameraDetected && (
-            <Alert variant="destructive" className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-center p-4">
-                <VideoOff className="h-10 w-10" />
-                <AlertTitle>Camera Access Denied</AlertTitle>
-                <AlertDescription>Please allow camera access in your browser settings and ensure a physical webcam is connected.</AlertDescription>
-                <Button onClick={() => getCameraPermission(true)}><RefreshCw className="mr-2"/>Try Again</Button>
-            </Alert>
-        )}
-        
-         {hasCameraPermission === null && !snapshot && (
-            <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 p-4 text-center">
-                <Loader2 className="h-8 w-8 animate-spin text-muted-foreground"/>
-                <p className="text-muted-foreground">Requesting camera access...</p>
-            </div>
-        )}
-
-        {snapshot && (
-            <img
-            src={snapshot}
-            alt="Snapshot"
-            className="absolute inset-0 h-full w-full object-cover"
-            />
-        )}
-    </div>
-  ), [snapshot, virtualCameraDetected, hasCameraPermission, getCameraPermission, faceDetected, isMediaPipeLoading, step, livenessChallengeMet]);
-
-
-  if (step === 4) {
+  if (step === 3) {
       return (
            <div className="flex items-start justify-center py-8 fade-in">
               <Card className="w-full max-w-lg text-center shadow-lg">
@@ -485,86 +198,66 @@ export default function AttendancePage() {
       )
   }
 
-  const getStepTitle = () => {
-    switch(step) {
-      case 1: return "Mark Your Attendance";
-      case 2: return "Liveness Challenge";
-      case 3: return "Identity Verification";
-      default: return "";
-    }
-  }
-
-  const getStepDescription = () => {
-      switch(step) {
-        case 1: return "Complete the steps below to record your attendance.";
-        case 2: return "To ensure you are present, please perform the following action.";
-        case 3: return "A snapshot is required for verification. Make sure you are doing the action from the previous step.";
-        default: return "";
-      }
-  }
-
-
   return (
     <div className="flex items-start justify-center py-8 fade-in">
       <Card className="w-full max-w-lg shadow-xl transition-all">
-        <CardHeader>
-          <CardTitle className="text-3xl font-bold">
-            {getStepTitle()}
-          </CardTitle>
-          <CardDescription>
-            {getStepDescription()}
-          </CardDescription>
-        </CardHeader>
-
         {step === 1 && (
             <>
+            <CardHeader>
+              <CardTitle className="text-3xl font-bold">
+                Mark Your Attendance
+              </CardTitle>
+              <CardDescription>
+                Complete the form below to proceed to verification.
+              </CardDescription>
+            </CardHeader>
             <CardContent className="space-y-6">
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                <div className="space-y-2">
-                <Label htmlFor="studentName" className="flex items-center gap-2 font-semibold">
-                    <User className="text-primary" /> Full Name
-                </Label>
-                <Input
-                    id="studentName"
-                    value={studentName}
-                    onChange={(e) => setStudentName(e.target.value)}
-                    placeholder="e.g., Jane Doe"
-                    disabled={isFormDisabled}
-                    className="text-base"
-                />
-                </div>
-                <div className="space-y-2">
-                <Label htmlFor="floorNumber" className="flex items-center gap-2 font-semibold">
-                    <Building className="text-primary" /> Floor Number
-                </Label>
-                <Input
-                    id="floorNumber"
-                    value={floorNumber}
-                    onChange={(e) => setFloorNumber(e.target.value)}
-                    placeholder="e.g., 4th Floor"
-                    disabled={isFormDisabled}
-                    className="text-base"
-                />
-                </div>
-            </div>
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                  <div className="space-y-2">
+                  <Label htmlFor="studentName" className="flex items-center gap-2 font-semibold">
+                      <User className="text-primary" /> Full Name
+                  </Label>
+                  <Input
+                      id="studentName"
+                      value={studentName}
+                      onChange={(e) => setStudentName(e.target.value)}
+                      placeholder="e.g., Jane Doe"
+                      disabled={isSubmitting}
+                      className="text-base"
+                  />
+                  </div>
+                  <div className="space-y-2">
+                  <Label htmlFor="floorNumber" className="flex items-center gap-2 font-semibold">
+                      <Building className="text-primary" /> Floor Number
+                  </Label>
+                  <Input
+                      id="floorNumber"
+                      value={floorNumber}
+                      onChange={(e) => setFloorNumber(e.target.value)}
+                      placeholder="e.g., 4th Floor"
+                      disabled={isSubmitting}
+                      className="text-base"
+                  />
+                  </div>
+              </div>
 
-            <div className="space-y-4">
-                <Label className="flex items-center gap-2 font-semibold">
-                    <MapPin className="text-primary" /> Live Location
-                </Label>
-                {renderLocationStatus()}
-            </div>
-             <Alert variant="default" className="border-blue-500/50 bg-blue-500/10 text-blue-700">
-                <Smartphone className="h-4 w-4 text-blue-600" />
-                <AlertTitle>Device Verification</AlertTitle>
-                <AlertDescription>
-                    Your attendance will be locked to this device for today.
-                    <p className="mt-1 text-xs truncate text-muted-foreground">Device ID: {deviceId}</p>
-                </AlertDescription>
-            </Alert>
+              <div className="space-y-4">
+                  <Label className="flex items-center gap-2 font-semibold">
+                      <MapPin className="text-primary" /> Live Location
+                  </Label>
+                  {renderLocationStatus()}
+              </div>
+               <Alert variant="default" className="border-blue-500/50 bg-blue-500/10 text-blue-700">
+                  <Smartphone className="h-4 w-4 text-blue-600" />
+                  <AlertTitle>Device Verification</AlertTitle>
+                  <AlertDescription>
+                      Your attendance will be locked to this device for today.
+                      <p className="mt-1 text-xs truncate text-muted-foreground">Device ID: {deviceId}</p>
+                  </AlertDescription>
+              </Alert>
             </CardContent>
             <CardFooter>
-                 <Button onClick={handleProceedToLiveness} disabled={!location || isFormDisabled} className="w-full py-6 text-lg font-semibold transition-all hover:scale-105 active-scale-100">
+                 <Button onClick={handleProceedToVerification} disabled={!location || isSubmitting} className="w-full py-6 text-lg font-semibold transition-all hover:scale-105 active-scale-100">
                     Next: Liveness Check
                  </Button>
             </CardFooter>
@@ -572,76 +265,19 @@ export default function AttendancePage() {
         )}
 
         {step === 2 && (
-            <>
-            <CardContent className="space-y-4">
-               {renderCameraView()}
-                <Alert>
-                    <Sparkles className="h-4 w-4" />
-                    <AlertTitle>Your Challenge:</AlertTitle>
-                    <AlertDescription className="text-lg font-semibold text-primary">
-                        {livenessChallenge.action}
-                    </AlertDescription>
-                </Alert>
-            </CardContent>
-            <CardFooter className="flex-col gap-4">
-                 <Button onClick={handleProceedToSnapshot} disabled={!hasCameraPermission || !faceDetected} className="w-full py-6 text-lg font-semibold transition-all hover:scale-105 active-scale-100">
-                    I'm Ready, Go to Snapshot
-                 </Button>
-                 <Button variant="link" onClick={() => { playSound('click'); setStep(1); }} disabled={isFormDisabled}>
-                     <ArrowLeft className="mr-2" />
-                     Go Back
-                 </Button>
-            </CardFooter>
-            </>
-        )}
-
-        {step === 3 && (
-            <>
-            <CardContent className="space-y-4">
-                {renderCameraView()}
-                <Alert variant="default" className="border-blue-500/50 bg-blue-500/10 text-blue-700">
-                    <AlertTriangle className="h-4 w-4 text-blue-600" />
-                    <AlertTitle>Reminder: {livenessChallenge.action}</AlertTitle>
-                    <AlertDescription>
-                        Please perform this action to enable the snapshot button.
-                    </AlertDescription>
-                </Alert>
-                <div className="flex gap-2">
-                <Button
-                    onClick={handleCapture}
-                    disabled={!!snapshot || !hasCameraPermission || isFormDisabled || !livenessChallengeMet}
-                    className="flex-1 transition-all hover:scale-105 active-scale-100"
-                >
-                    <Camera className="mr-2" />
-                    {snapshot ? "Snapshot Taken" : "Take Snapshot"}
-                </Button>
-                {snapshot && (
-                    <Button onClick={handleRetake} variant="outline" disabled={isFormDisabled} className="transition-all hover:scale-105 active-scale-100">
-                        <RefreshCw className="mr-2" />
-                        Retake
-                    </Button>
-                )}
-                </div>
-            </CardContent>
-            <CardFooter className="flex flex-col gap-4">
-                <Button
-                    onClick={handleMarkAttendance}
-                    disabled={isFormDisabled || !snapshot}
-                    className="w-full py-6 text-lg font-bold transition-all hover:scale-105 active-scale-100"
-                >
-                    {isSubmitting ? (
-                    <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-                    ) : (
-                    <CheckCircle className="mr-2 h-5 w-5" />
-                    )}
-                    {isSubmitting ? "Submitting..." : "Submit Attendance"}
-                </Button>
-                 <Button variant="link" onClick={() => { playSound('click'); setStep(2); setSnapshot(null); }} disabled={isFormDisabled}>
-                     <ArrowLeft className="mr-2" />
-                     Back to Challenge
-                 </Button>
-            </CardFooter>
-            </>
+          <Suspense fallback={
+              <CardContent className="flex flex-col items-center justify-center space-y-4 p-8 min-h-[400px]">
+                <Loader2 className="h-10 w-10 animate-spin text-primary" />
+                <p className="text-muted-foreground">Loading Verification Module...</p>
+              </CardContent>
+          }>
+            <VerificationStep
+              livenessChallenge={livenessChallenge}
+              onVerified={handleMarkAttendance}
+              isSubmitting={isSubmitting}
+              onBack={() => setStep(1)}
+            />
+          </Suspense>
         )}
       </Card>
     </div>
