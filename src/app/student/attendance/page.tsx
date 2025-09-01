@@ -30,6 +30,7 @@ import {
   User,
   Building,
   AlertTriangle,
+  RefreshCw,
 } from "lucide-react";
 import { useGeolocator } from "@/hooks/use-geolocator";
 
@@ -38,16 +39,16 @@ export default function AttendancePage() {
   const { toast } = useToast();
   const router = useRouter();
   const { location, error, status } = useGeolocator({ enableHighAccuracy: true });
+  
+  const [step, setStep] = useState(1); // 1: Form, 2: Snapshot, 3: Success
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isMarked, setIsMarked] = useState(false);
   const [hasCameraPermission, setHasCameraPermission] = useState<boolean | null>(null);
   const [snapshot, setSnapshot] = useState<string | null>(null);
   const [studentName, setStudentName] = useState("");
   const [floorNumber, setFloorNumber] = useState("");
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const [shake, setShake] = useState(false);
-
+  
   const getCameraPermission = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ video: true });
@@ -66,15 +67,18 @@ export default function AttendancePage() {
     }
   };
 
-
   useEffect(() => {
+    if (step === 2 && !snapshot) {
+      getCameraPermission();
+    }
     return () => {
       if (videoRef.current && videoRef.current.srcObject) {
         const stream = videoRef.current.srcObject as MediaStream;
         stream.getTracks().forEach(track => track.stop());
       }
     };
-  }, []);
+  }, [step, snapshot]);
+
 
   const handleCapture = () => {
     if (videoRef.current && canvasRef.current) {
@@ -98,12 +102,10 @@ export default function AttendancePage() {
 
   const handleRetake = () => {
     setSnapshot(null);
-    getCameraPermission();
   };
 
-
-  const handleMarkAttendance = async () => {
-    if (!studentName || !floorNumber) {
+  const handleNextStep = () => {
+     if (!studentName || !floorNumber) {
       toast({
         variant: "destructive",
         title: "Missing Information",
@@ -111,7 +113,6 @@ export default function AttendancePage() {
       });
       return;
     }
-    
     if (!location) {
       toast({
         variant: "destructive",
@@ -120,28 +121,28 @@ export default function AttendancePage() {
       });
       return;
     }
+    setStep(2);
+  }
 
+
+  const handleMarkAttendance = async () => {
     if (!snapshot) {
-      toast({
-        variant: "destructive",
-        title: "Snapshot Required",
-        description: "Please take a snapshot before marking attendance.",
-      });
-      setShake(true);
-      setTimeout(() => setShake(false), 500);
-      return;
+        toast({
+            variant: "destructive",
+            title: "Snapshot Required",
+            description: "Please take a snapshot to continue.",
+        });
+        return;
     }
-
     setIsSubmitting(true);
-
     try {
-        await addRecord({ studentName, floorNumber, location, photo: snapshot });
-        setIsMarked(true);
+        await addRecord({ studentName, floorNumber, location: location!, photo: snapshot });
+        setStep(3); // Move to success step
         toast({
           title: "Success!",
           description: "Thank you for marking the attendance.",
         });
-        setTimeout(() => router.push("/"), 2000);
+        setTimeout(() => router.push("/"), 3000);
 
     } catch (error) {
         console.error("Error marking attendance:", error);
@@ -155,7 +156,7 @@ export default function AttendancePage() {
     }
   };
 
-  const isFormDisabled = isMarked || isSubmitting;
+  const isFormDisabled = isSubmitting;
 
   const renderLocationStatus = () => {
     switch (status) {
@@ -192,137 +193,159 @@ export default function AttendancePage() {
         return null;
     }
   };
+  
+  if (step === 3) {
+      return (
+           <div className="flex items-start justify-center py-8">
+              <Card className="w-full max-w-lg text-center shadow-lg">
+                <CardHeader>
+                    <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-green-100">
+                        <CheckCircle className="h-12 w-12 text-green-600" />
+                    </div>
+                </CardHeader>
+                <CardContent>
+                    <CardTitle className="text-3xl font-bold">Attendance Marked!</CardTitle>
+                    <CardDescription className="mt-2 text-lg">
+                        You will be redirected to the home page shortly.
+                    </CardDescription>
+                </CardContent>
+              </Card>
+           </div>
+      )
+  }
 
 
   return (
     <div className="flex items-start justify-center py-8">
       <Card className="w-full max-w-lg shadow-lg">
         <CardHeader>
-          <CardTitle className="text-3xl font-bold">Mark Your Attendance</CardTitle>
+          <CardTitle className="text-3xl font-bold">
+            {step === 1 ? "Mark Your Attendance" : "Take a Snapshot"}
+          </CardTitle>
           <CardDescription>
-            Complete the steps below to record your attendance.
+            {step === 1 ? "Complete the steps below to record your attendance." : "A snapshot is required for verification."}
           </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-6">
-           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-            <div className="space-y-2">
-              <Label htmlFor="studentName" className="flex items-center gap-2 font-semibold">
-                <User className="text-primary" /> Full Name
-              </Label>
-              <Input
-                id="studentName"
-                value={studentName}
-                onChange={(e) => setStudentName(e.target.value)}
-                placeholder="e.g., Jane Doe"
-                disabled={isFormDisabled}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="floorNumber" className="flex items-center gap-2 font-semibold">
-                <Building className="text-primary" /> Floor Number
-              </Label>
-              <Input
-                id="floorNumber"
-                value={floorNumber}
-                onChange={(e) => setFloorNumber(e.target.value)}
-                placeholder="e.g., 4th Floor"
-                disabled={isFormDisabled}
-              />
-            </div>
-          </div>
 
-          <div className="space-y-4">
-             <Label className="flex items-center gap-2 font-semibold">
-                <Camera className="text-primary" /> Photo Verification
-              </Label>
-            <div className="relative aspect-video w-full overflow-hidden rounded-lg border-2 border-dashed bg-muted">
-              <video
-                ref={videoRef}
-                className={`h-full w-full object-cover ${snapshot ? 'hidden' : ''}`}
-                autoPlay
-                muted
-                playsInline
-              />
-              <canvas ref={canvasRef} className="hidden" />
-
-              {hasCameraPermission === false && (
-                <Alert variant="destructive" className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-center">
-                    <VideoOff className="h-10 w-10" />
-                    <AlertTitle>Camera Access Denied</AlertTitle>
-                    <AlertDescription>Allow camera access in your browser settings and refresh.</AlertDescription>
-                </Alert>
-              )}
-              {hasCameraPermission === null && !snapshot && (
-                 <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 p-4 text-center">
-                    <p className="text-muted-foreground">The app needs camera access for a photo verification.</p>
-                    <Button onClick={getCameraPermission}><Camera className="mr-2"/>Enable Camera</Button>
-                 </div>
-              )}
-
-              {snapshot && (
-                <img
-                  src={snapshot}
-                  alt="Snapshot"
-                  className="absolute inset-0 h-full w-full object-cover"
+        {step === 1 && (
+            <>
+            <CardContent className="space-y-6">
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                <div className="space-y-2">
+                <Label htmlFor="studentName" className="flex items-center gap-2 font-semibold">
+                    <User className="text-primary" /> Full Name
+                </Label>
+                <Input
+                    id="studentName"
+                    value={studentName}
+                    onChange={(e) => setStudentName(e.target.value)}
+                    placeholder="e.g., Jane Doe"
+                    disabled={isFormDisabled}
                 />
-              )}
+                </div>
+                <div className="space-y-2">
+                <Label htmlFor="floorNumber" className="flex items-center gap-2 font-semibold">
+                    <Building className="text-primary" /> Floor Number
+                </Label>
+                <Input
+                    id="floorNumber"
+                    value={floorNumber}
+                    onChange={(e) => setFloorNumber(e.target.value)}
+                    placeholder="e.g., 4th Floor"
+                    disabled={isFormDisabled}
+                />
+                </div>
             </div>
-            
-            <div className={`flex gap-2 ${shake ? 'animate-shake' : ''}`}>
-              <Button
-                onClick={handleCapture}
-                disabled={!!snapshot || !hasCameraPermission || isFormDisabled}
-                className="flex-1"
-              >
-                <Camera className="mr-2" />
-                {snapshot ? "Snapshot Taken" : "Take Snapshot"}
-              </Button>
-              {snapshot && (
-                <Button onClick={handleRetake} variant="outline"  disabled={isFormDisabled}>
-                  Retake
-                </Button>
-              )}
-            </div>
-          </div>
 
-          <div className="space-y-4">
-            <Label className="flex items-center gap-2 font-semibold">
-                <MapPin className="text-primary" /> Live Location
-              </Label>
-            {renderLocationStatus()}
-          </div>
-        </CardContent>
-        <CardFooter>
-          <Button
-            onClick={handleMarkAttendance}
-            disabled={isFormDisabled || !location || !snapshot}
-            className="w-full py-6 text-lg font-bold"
-          >
-            {isSubmitting ? (
-              <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-            ) : isMarked ? (
-              <CheckCircle className="mr-2 h-5 w-5" />
-            ) : null}
-            {isSubmitting
-              ? "Marking..."
-              : isMarked
-              ? "Attendance Marked"
-              : "Mark My Attendance"}
-          </Button>
-        </CardFooter>
+            <div className="space-y-4">
+                <Label className="flex items-center gap-2 font-semibold">
+                    <MapPin className="text-primary" /> Live Location
+                </Label>
+                {renderLocationStatus()}
+            </div>
+            </CardContent>
+            <CardFooter>
+                 <Button onClick={handleNextStep} disabled={!location || isFormDisabled} className="w-full py-6 text-lg">
+                    Next: Take Snapshot
+                 </Button>
+            </CardFooter>
+            </>
+        )}
+
+        {step === 2 && (
+            <>
+            <CardContent className="space-y-4">
+                <div className="relative aspect-video w-full overflow-hidden rounded-lg border-2 border-dashed bg-muted">
+                <video
+                    ref={videoRef}
+                    className={`h-full w-full object-cover ${snapshot ? 'hidden' : ''}`}
+                    autoPlay
+                    muted
+                    playsInline
+                />
+                <canvas ref={canvasRef} className="hidden" />
+
+                {hasCameraPermission === false && (
+                    <Alert variant="destructive" className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-center">
+                        <VideoOff className="h-10 w-10" />
+                        <AlertTitle>Camera Access Denied</AlertTitle>
+                        <AlertDescription>Allow camera access in your browser settings and refresh.</AlertDescription>
+                    </Alert>
+                )}
+                
+                 {hasCameraPermission === null && !snapshot && (
+                    <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 p-4 text-center">
+                        <p className="text-muted-foreground">The app needs camera access to take a snapshot.</p>
+                        <Button onClick={getCameraPermission}><Camera className="mr-2"/>Enable Camera</Button>
+                    </div>
+                )}
+
+                {snapshot && (
+                    <img
+                    src={snapshot}
+                    alt="Snapshot"
+                    className="absolute inset-0 h-full w-full object-cover"
+                    />
+                )}
+                </div>
+                
+                <div className="flex gap-2">
+                <Button
+                    onClick={handleCapture}
+                    disabled={!!snapshot || !hasCameraPermission || isFormDisabled}
+                    className="flex-1"
+                >
+                    <Camera className="mr-2" />
+                    {snapshot ? "Snapshot Taken" : "Take Snapshot"}
+                </Button>
+                {snapshot && (
+                    <Button onClick={handleRetake} variant="outline" disabled={isFormDisabled}>
+                        <RefreshCw className="mr-2" />
+                        Retake
+                    </Button>
+                )}
+                </div>
+            </CardContent>
+            <CardFooter className="flex flex-col gap-4">
+                <Button
+                    onClick={handleMarkAttendance}
+                    disabled={isFormDisabled || !snapshot}
+                    className="w-full py-6 text-lg font-bold"
+                >
+                    {isSubmitting ? (
+                    <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                    ) : (
+                    <CheckCircle className="mr-2 h-5 w-5" />
+                    )}
+                    {isSubmitting ? "Submitting..." : "Submit Attendance"}
+                </Button>
+                 <Button variant="link" onClick={() => setStep(1)} disabled={isFormDisabled}>
+                     Go Back
+                 </Button>
+            </CardFooter>
+            </>
+        )}
       </Card>
-      <style jsx>{`
-        .animate-shake {
-          animation: shake 0.5s cubic-bezier(.36,.07,.19,.97) both;
-          transform: translate3d(0, 0, 0);
-        }
-        @keyframes shake {
-          10%, 90% { transform: translate3d(-1px, 0, 0); }
-          20%, 80% { transform: translate3d(2px, 0, 0); }
-          30%, 50%, 70% { transform: translate3d(-4px, 0, 0); }
-          40%, 60% { transform: translate3d(4px, 0, 0); }
-        }
-      `}</style>
     </div>
   );
 }
