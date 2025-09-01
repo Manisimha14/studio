@@ -49,7 +49,7 @@ let lastVideoTime = -1;
 let animationFrameId: number;
 
 export default function VerificationStep({ livenessChallenge, onVerified, isSubmitting, onBack }: VerificationStepProps) {
-  const [status, setStatus] = useState<"initializing" | "loading_model" | "ready" | "error" | "permission_denied" | "virtual_camera">("initializing");
+  const [status, setStatus] = useState<"initializing" | "loading_model" | "ready" | "error" | "permission_denied">("initializing");
   const [faceDetected, setFaceDetected] = useState(false);
   const [livenessChallengeMet, setLivenessChallengeMet] = useState(false);
   const [countdown, setCountdown] = useState(LIVENESS_CHALLENGE_DURATION);
@@ -156,16 +156,6 @@ export default function VerificationStep({ livenessChallenge, onVerified, isSubm
           await videoRef.current.play();
         }
         
-        const devices = await navigator.mediaDevices.enumerateDevices();
-        const videoInputs = devices.filter(device => device.kind === 'videoinput');
-        if (videoInputs.length === 0) throw new Error("No camera found.");
-        const suspiciousKeywords = ['obs', 'droidcam', 'splitcam', 'vcam', 'virtual', 'proxy'];
-        if (videoInputs.some(device => suspiciousKeywords.some(keyword => device.label.toLowerCase().includes(keyword)))) {
-          setStatus("virtual_camera");
-          playSound('error');
-          return;
-        }
-
         setStatus("loading_model");
         const filesetResolver = await FilesetResolver.forVisionTasks("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm");
         faceLandmarker = await FaceLandmarker.createFromOptions(filesetResolver, {
@@ -261,14 +251,6 @@ export default function VerificationStep({ livenessChallenge, onVerified, isSubm
                     <p className="text-muted-foreground animate-pulse">Loading AI...</p>
                 </div>
             );
-        case "virtual_camera":
-           return (
-             <Alert variant="destructive" className={`${commonClasses} bg-destructive/90`}>
-                  <Ban className="h-10 w-10" />
-                  <AlertTitle>Physical Webcam Required</AlertTitle>
-                  <AlertDescription>The use of virtual camera software is not permitted. Please use a physical webcam.</AlertDescription>
-              </Alert>
-           );
         case "permission_denied":
             return (
               <Alert variant="destructive" className={`${commonClasses} bg-destructive/90`}>
