@@ -66,11 +66,15 @@ export function AttendanceProvider({ children }: { children: ReactNode }) {
 
   const addRecord = async (record: NewRecord) => {
     const attendanceRef = ref(db, 'attendance');
-    const newRecord = {
-      ...record,
+    // Explicitly create the object to be pushed
+    const newRecordPayload = {
+      studentName: record.studentName,
+      floorNumber: record.floorNumber,
+      location: record.location,
+      photo: record.photo,
       timestamp: serverTimestamp(),
     };
-    await push(attendanceRef, newRecord);
+    await push(attendanceRef, newRecordPayload);
   };
   
   const removeRecord = async (id: string) => {
