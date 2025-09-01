@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import {
@@ -30,7 +30,15 @@ import {
   User,
   Building,
   AlertTriangle,
+  Smile,
+  Eye,
 } from "lucide-react";
+import { checkLiveness } from "@/ai/flows/liveness-check-flow";
+
+const LIVENESS_CHALLENGES = [
+    { type: "smile", text: "Smile for the camera!", icon: <Smile className="h-5 w-5" /> },
+    { type: "blink", text: "Blink for the camera!", icon: <Eye className="h-5 w-5" /> }
+];
 
 export default function AttendancePage() {
   const { addRecord } = useAttendance();
@@ -50,9 +58,12 @@ export default function AttendancePage() {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [shake, setShake] = useState(false);
+  
+  const [livenessChallenge, setLivenessChallenge] = useState<{type: string, text: string, icon: JSX.Element} | null>(null);
+  const [livenessLoading, setLivenessLoading] = useState(false);
+
 
   useEffect(() => {
-    // Request location permission on mount
     if (!navigator.geolocation) {
       setLocationError("Geolocation is not supported by your browser.");
       return;
@@ -66,7 +77,7 @@ export default function AttendancePage() {
         setLocationError(null);
       },
       () => {
-        setLocationError("Unable to retrieve your location. Please enable location services in your browser settings and refresh the page.");
+        setLocationError("Unable to retrieve your location. Please enable location services and refresh.");
       },
       { enableHighAccuracy: true }
     );
@@ -79,13 +90,15 @@ export default function AttendancePage() {
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
       }
+      // Set a random liveness challenge
+      setLivenessChallenge(LIVENESS_CHALLENGES[Math.floor(Math.random() * LIVENESS_CHALLENGES.length)]);
     } catch (error) {
       console.error("Error accessing camera:", error);
       setHasCameraPermission(false);
       toast({
         variant: 'destructive',
         title: 'Camera Access Denied',
-        description: 'Please enable camera permissions in your browser settings to use this app.',
+        description: 'Please enable camera permissions in your browser settings.',
       });
     }
   };
@@ -93,7 +106,6 @@ export default function AttendancePage() {
 
   useEffect(() => {
     return () => {
-      // Stop camera stream when component unmounts
       if (videoRef.current && videoRef.current.srcObject) {
         const stream = videoRef.current.srcObject as MediaStream;
         stream.getTracks().forEach(track => track.stop());
@@ -110,10 +122,9 @@ export default function AttendancePage() {
       const context = canvas.getContext("2d");
       if (context) {
         context.drawImage(video, 0, 0, video.videoWidth, video.videoHeight);
-        const dataUrl = canvas.toDataURL("image/jpeg", 0.5);
+        const dataUrl = canvas.toDataURL("image/jpeg", 0.5); 
         setSnapshot(dataUrl);
 
-        // Turn off camera stream after capture
         const stream = video.srcObject as MediaStream;
         if(stream) {
           stream.getTracks().forEach(track => track.stop());
@@ -124,6 +135,7 @@ export default function AttendancePage() {
 
   const handleRetake = () => {
     setSnapshot(null);
+    setLivenessChallenge(null);
     getCameraPermission();
   };
 
@@ -142,12 +154,12 @@ export default function AttendancePage() {
       toast({
         variant: "destructive",
         title: "Location Error",
-        description: "Could not get your location. Please ensure it's enabled and try again.",
+        description: "Could not get your location. Please ensure it's enabled.",
       });
       return;
     }
 
-    if (!snapshot) {
+    if (!snapshot || !livenessChallenge) {
       toast({
         variant: "destructive",
         title: "Snapshot Required",
@@ -158,17 +170,27 @@ export default function AttendancePage() {
       return;
     }
 
-    if (isMarked) {
-      toast({
-        title: "Already Marked",
-        description: "You have already marked your attendance.",
-      });
-      return;
-    }
-
     setIsSubmitting(true);
+    setLivenessLoading(true);
 
     try {
+        const livenessResult = await checkLiveness({ photoDataUri: snapshot, challenge: livenessChallenge.type });
+
+        if (!livenessResult.isLive) {
+            toast({
+                variant: "destructive",
+                title: "Liveness Check Failed",
+                description: livenessResult.reason || "Please retake the photo and follow the instructions carefully.",
+            });
+            handleRetake();
+            return;
+        }
+
+        toast({
+            title: "Liveness Check Passed!",
+            description: "Submitting your attendance record...",
+        });
+
         await addRecord({ studentName, floorNumber, location, photo: snapshot });
         setIsMarked(true);
         toast({
@@ -176,6 +198,7 @@ export default function AttendancePage() {
           description: "Thank you for marking the attendance.",
         });
         setTimeout(() => router.push("/"), 2000);
+
     } catch (error) {
         console.error("Error marking attendance:", error);
         toast({
@@ -185,8 +208,11 @@ export default function AttendancePage() {
         });
     } finally {
         setIsSubmitting(false);
+        setLivenessLoading(false);
     }
   };
+
+  const isFormDisabled = isMarked || isSubmitting || livenessLoading;
 
   return (
     <div className="flex items-start justify-center py-8">
@@ -208,7 +234,7 @@ export default function AttendancePage() {
                 value={studentName}
                 onChange={(e) => setStudentName(e.target.value)}
                 placeholder="e.g., Jane Doe"
-                disabled={isMarked || isSubmitting}
+                disabled={isFormDisabled}
               />
             </div>
             <div className="space-y-2">
@@ -220,14 +246,14 @@ export default function AttendancePage() {
                 value={floorNumber}
                 onChange={(e) => setFloorNumber(e.target.value)}
                 placeholder="e.g., 4th Floor"
-                disabled={isMarked || isSubmitting}
+                disabled={isFormDisabled}
               />
             </div>
           </div>
 
           <div className="space-y-4">
              <Label className="flex items-center gap-2 font-semibold">
-                <Camera className="text-primary" /> Snapshot
+                <Camera className="text-primary" /> Liveness Check
               </Label>
             <div className="relative aspect-video w-full overflow-hidden rounded-lg border-2 border-dashed bg-muted">
               <video
@@ -243,12 +269,12 @@ export default function AttendancePage() {
                 <Alert variant="destructive" className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-center">
                     <VideoOff className="h-10 w-10" />
                     <AlertTitle>Camera Access Denied</AlertTitle>
-                    <AlertDescription>Please allow camera access in your browser settings and refresh the page.</AlertDescription>
+                    <AlertDescription>Allow camera access in your browser settings and refresh.</AlertDescription>
                 </Alert>
               )}
               {hasCameraPermission === null && !snapshot && (
-                 <div className="absolute inset-0 flex flex-col items-center justify-center gap-4">
-                    <p className="text-muted-foreground">Click below to start your camera.</p>
+                 <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 p-4 text-center">
+                    <p className="text-muted-foreground">The app needs camera access for a quick liveness check to prevent fraud.</p>
                     <Button onClick={getCameraPermission}><Camera className="mr-2"/>Enable Camera</Button>
                  </div>
               )}
@@ -260,19 +286,34 @@ export default function AttendancePage() {
                   className="absolute inset-0 h-full w-full object-cover"
                 />
               )}
+
+               {livenessLoading && (
+                 <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-black/50 text-white">
+                    <Loader2 className="h-8 w-8 animate-spin" />
+                    <span>Verifying liveness...</span>
+                 </div>
+              )}
             </div>
             
+            {livenessChallenge && !snapshot && (
+                <Alert>
+                    {livenessChallenge.icon}
+                    <AlertTitle>Liveness Challenge</AlertTitle>
+                    <AlertDescription>{livenessChallenge.text}</AlertDescription>
+                </Alert>
+            )}
+
             <div className={`flex gap-2 ${shake ? 'animate-shake' : ''}`}>
               <Button
                 onClick={handleCapture}
-                disabled={!!snapshot || !hasCameraPermission || isMarked || isSubmitting}
+                disabled={!!snapshot || !hasCameraPermission || isFormDisabled}
                 className="flex-1"
               >
                 <Camera className="mr-2" />
                 {snapshot ? "Snapshot Taken" : "Take Snapshot"}
               </Button>
               {snapshot && (
-                <Button onClick={handleRetake} variant="outline"  disabled={isMarked || isSubmitting}>
+                <Button onClick={handleRetake} variant="outline"  disabled={isFormDisabled}>
                   Retake
                 </Button>
               )}
@@ -310,15 +351,17 @@ export default function AttendancePage() {
         <CardFooter>
           <Button
             onClick={handleMarkAttendance}
-            disabled={isSubmitting || !location || !snapshot || isMarked}
+            disabled={isFormDisabled || !location || !snapshot}
             className="w-full py-6 text-lg font-bold"
           >
-            {isSubmitting ? (
+            {isSubmitting || livenessLoading ? (
               <Loader2 className="mr-2 h-5 w-5 animate-spin" />
             ) : isMarked ? (
               <CheckCircle className="mr-2 h-5 w-5" />
             ) : null}
-            {isSubmitting
+            {livenessLoading 
+              ? "Verifying..."
+              : isSubmitting
               ? "Marking..."
               : isMarked
               ? "Attendance Marked"
