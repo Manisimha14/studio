@@ -16,13 +16,12 @@ import {
   limitToLast,
   onChildAdded,
   startAt,
-  endAt
 } from "firebase/database";
 
 export interface AttendanceRecord {
-  id: string; // Firebase push keys are strings
+  id: string;
   studentName: string;
-  timestamp: number; // Store as a server-side timestamp
+  timestamp: number;
   location: {
     latitude: number;
     longitude: number;
@@ -38,7 +37,7 @@ interface NewRecord {
         latitude: number;
         longitude: number;
     };
-    photo: string | null;
+    photo: string;
 }
 
 interface AttendanceContextType {
@@ -67,7 +66,6 @@ export function AttendanceProvider({ children }: { children: ReactNode }) {
   const [hasMore, setHasMore] = useState(true);
   const [lastTimestamp, setLastTimestamp] = useState<number | null>(null);
 
-  
   const processRecords = (snapshot: any) => {
       const data = snapshot.val();
       if (!data) {
@@ -137,7 +135,6 @@ export function AttendanceProvider({ children }: { children: ReactNode }) {
         const newRecord = { id: snapshot.key, ...snapshot.val() };
         
         setPaginatedRecords(prevRecords => {
-            // Avoid adding duplicates
             if(prevRecords.some(r => r.id === newRecord.id)) {
                 return prevRecords;
             }

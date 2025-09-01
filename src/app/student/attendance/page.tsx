@@ -37,7 +37,6 @@ import {
 import { useGeolocator } from "@/hooks/use-geolocator";
 import useSound from "use-sound";
 
-
 export default function AttendancePage() {
   const { addRecord } = useAttendance();
   const { toast } = useToast();
@@ -58,7 +57,7 @@ export default function AttendancePage() {
   const [playSuccess] = useSound('/sounds/success.mp3', { volume: 0.5 });
   const [playError] = useSound('/sounds/error.mp3', { volume: 0.5 });
   const [playCapture] = useSound('/sounds/capture.mp3', { volume: 0.5 });
-  
+
   const getCameraPermission = async () => {
     setVirtualCameraDetected(false);
     try {
@@ -92,7 +91,6 @@ export default function AttendancePage() {
        }
 
       const stream = await navigator.mediaDevices.getUserMedia({ video: {
-        // Try to force a real camera by default
         facingMode: 'user'
       } });
       setHasCameraPermission(true);
@@ -138,7 +136,6 @@ export default function AttendancePage() {
     if (videoRef.current && canvasRef.current) {
       const video = videoRef.current;
       const canvas = canvasRef.current;
-      // Set canvas to a lower resolution to reduce data size and for faster processing
       const targetWidth = 480;
       const scale = targetWidth / video.videoWidth;
       canvas.width = targetWidth;
@@ -147,7 +144,6 @@ export default function AttendancePage() {
       const context = canvas.getContext("2d");
       if (context) {
         context.drawImage(video, 0, 0, canvas.width, canvas.height);
-        // Use a higher quality JPEG for better image clarity
         const dataUrl = canvas.toDataURL("image/jpeg", 0.8);
         setSnapshot(dataUrl);
 
@@ -201,9 +197,14 @@ export default function AttendancePage() {
     }
     setIsSubmitting(true);
     try {
-        await addRecord({ studentName, floorNumber, location: location!, photo: snapshot });
+        await addRecord({ 
+          studentName, 
+          floorNumber, 
+          location: location!, 
+          photo: snapshot,
+        });
         playSuccess();
-        setStep(3); // Move to success step
+        setStep(3);
         toast({
           title: "Success!",
           description: "Thank you for marking the attendance.",
@@ -288,7 +289,7 @@ export default function AttendancePage() {
       <Card className="w-full max-w-lg shadow-xl transition-all">
         <CardHeader>
           <CardTitle className="text-3xl font-bold">
-            {step === 1 ? "Mark Your Attendance" : "Take a Snapshot"}
+            {step === 1 ? "Mark Your Attendance" : "Identity Verification"}
           </CardTitle>
           <CardDescription>
             {step === 1 ? "Complete the steps below to record your attendance." : "A snapshot is required for verification."}
@@ -428,5 +429,3 @@ export default function AttendancePage() {
     </div>
   );
 }
-
-    

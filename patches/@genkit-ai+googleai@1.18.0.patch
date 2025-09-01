@@ -1,0 +1,14 @@
+diff --git a/node_modules/@genkit-ai/googleai/package.json b/node_modules/@genkit-ai/googleai/package.json
+index 5a0c84f50dc9079a4198305c102a9a7a0129a089..b4931a299d25164d7f57564d260f890e0c1f43a6 100644
+--- a/node_modules/@genkit-ai/googleai/package.json
++++ b/node_modules/@genkit-ai/googleai/package.json
+@@ -48,7 +48,6 @@
+     "@google-cloud/vertexai": "^0.8.1",
+     "@types/node": "^20.11.20"
+   },
+-  "peerDependencies": {
+-    "genkit": "^1.18.0"
+-  }
+ }
++  "peerDependencies": {}
+}

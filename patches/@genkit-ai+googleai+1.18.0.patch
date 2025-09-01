@@ -1,0 +1,15 @@
+diff --git a/node_modules/@genkit-ai/googleai/package.json b/node_modules/@genkit-ai/googleai/package.json
+index 983193e..f2c7333 100644
+--- a/node_modules/@genkit-ai/googleai/package.json
++++ b/node_modules/@genkit-ai/googleai/package.json
+@@ -29,9 +29,6 @@
+     "zod": "^3.22.4"
+   },
+   "peerDependencies": {
+-    "genkit": "^1.18.0"
+-  },
+-  "peerDependenciesMeta": {
+     "firebase-functions": {
+       "optional": true
+     },
+

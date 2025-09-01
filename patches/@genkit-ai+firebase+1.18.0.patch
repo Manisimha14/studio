@@ -1,14 +1,12 @@
 diff --git a/node_modules/@genkit-ai/firebase/package.json b/node_modules/@genkit-ai/firebase/package.json
-index 548c775..521d603 100644
+index 588a44b..789a797 100644
 --- a/node_modules/@genkit-ai/firebase/package.json
 +++ b/node_modules/@genkit-ai/firebase/package.json
-@@ -62,10 +62,6 @@
-     "firebase-functions": "^5.0.1",
-     "firebase-functions-test": "^3.3.0"
+@@ -51,7 +51,6 @@
    },
--  "peerDependencies": {
--    "genkit": "^1.18.0"
--  },
+   "peerDependencies": {
+     "@genkit-ai/core": "^1.16.1",
+-    "genkit": "^1.18.0",
+     "zod": "^3.23.8"
+   },
    "peerDependenciesMeta": {
-     "firebase-admin": {
-       "optional": true

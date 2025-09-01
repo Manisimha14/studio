@@ -1,0 +1,12 @@
+diff --git a/node_modules/@genkit-ai/core/package.json b/node_modules/@genkit-ai/core/package.json
+index 54c33282a559794017f8a782b682662283e33284..5507851a37c15112f459c2586a113589b252c4b8 100644
+--- a/node_modules/@genkit-ai/core/package.json
++++ b/node_modules/@genkit-ai/core/package.json
+@@ -62,7 +62,6 @@
+     "typescript": "^5.3.3"
+   },
+   "peerDependencies": {
+-    "genkit": "^1.18.0",
+     "zod": "^3.23.8"
+   },
+   "peerDependenciesMeta": {
