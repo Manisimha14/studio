@@ -13,7 +13,10 @@ import {
   query, 
   orderByChild,
   endBefore,
-  limitToLast
+  limitToLast,
+  onChildAdded,
+  startAt,
+  endAt
 } from "firebase/database";
 
 export interface AttendanceRecord {
@@ -62,8 +65,10 @@ export function AttendanceProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(true);
+  const [lastTimestamp, setLastTimestamp] = useState<number | null>(null);
+
   
-  const processSnapshot = (snapshot: any) => {
+  const processRecords = (snapshot: any) => {
       const data = snapshot.val();
       if (!data) {
         return [];
@@ -79,71 +84,69 @@ export function AttendanceProvider({ children }: { children: ReactNode }) {
   const fetchInitialRecords = useCallback(() => {
      setLoading(true);
      const attendanceRef = ref(db, 'attendance');
-     const recordsQuery = query(attendanceRef, orderByChild('timestamp'));
+     
+     const totalRecordsQuery = query(attendanceRef);
+     onValue(totalRecordsQuery, (snapshot) => {
+        setAllRecordsCount(snapshot.size);
+     }, { onlyOnce: true });
+
+     const recordsQuery = query(attendanceRef, orderByChild('timestamp'), limitToLast(PAGE_SIZE));
      onValue(recordsQuery, (snapshot) => {
-         const fullList = processSnapshot(snapshot);
-         setAllRecordsCount(fullList.length);
-         const paginated = fullList.slice(0, PAGE_SIZE);
-         setPaginatedRecords(paginated);
-         setHasMore(fullList.length > PAGE_SIZE);
+         const records = processRecords(snapshot);
+         if (records.length > 0) {
+            setLastTimestamp(records[records.length-1].timestamp);
+         }
+         setPaginatedRecords(records);
+         setHasMore(records.length === PAGE_SIZE);
          setLoading(false);
      }, { onlyOnce: true });
   }, []);
 
   const fetchMoreRecords = useCallback(() => {
-    if (!hasMore || loadingMore || paginatedRecords.length === 0) return;
+    if (!hasMore || loadingMore || !lastTimestamp) return;
     
     setLoadingMore(true);
-    const lastRecord = paginatedRecords[paginatedRecords.length - 1];
     const attendanceRef = ref(db, 'attendance');
-    // We query all records again and slice, which is inefficient.
-    // A better implementation would use endBefore() and limitToLast() for true pagination.
     const recordsQuery = query(
       attendanceRef, 
-      orderByChild('timestamp')
+      orderByChild('timestamp'),
+      endBefore(lastTimestamp),
+      limitToLast(PAGE_SIZE)
     );
 
     onValue(recordsQuery, (snapshot) => {
-      const fullList = processSnapshot(snapshot);
-      const lastRecordIndex = fullList.findIndex(r => r.id === lastRecord.id);
-      
-      if (lastRecordIndex !== -1) {
-        const nextRecords = fullList.slice(lastRecordIndex + 1, lastRecordIndex + 1 + PAGE_SIZE);
-        if (nextRecords.length > 0) {
-            setPaginatedRecords(prev => [...prev, ...nextRecords]);
-            setHasMore(fullList.length > paginatedRecords.length + nextRecords.length);
-        } else {
-            setHasMore(false);
-        }
+      const newRecords = processRecords(snapshot);
+      if (newRecords.length > 0) {
+          setLastTimestamp(newRecords[newRecords.length-1].timestamp);
+          setPaginatedRecords(prev => [...prev, ...newRecords]);
+          setHasMore(newRecords.length === PAGE_SIZE);
       } else {
-        setHasMore(false);
+          setHasMore(false);
       }
       setLoadingMore(false);
     }, { onlyOnce: true });
 
-  }, [hasMore, loadingMore, paginatedRecords]);
+  }, [hasMore, loadingMore, lastTimestamp]);
 
 
   useEffect(() => {
-    setLoading(true);
     const attendanceRef = ref(db, 'attendance');
-    const recordsQuery = query(attendanceRef, orderByChild('timestamp'));
+    const recentRecordsQuery = query(attendanceRef, orderByChild('timestamp'), startAt(Date.now()));
     
-    const unsubscribe = onValue(recordsQuery, (snapshot) => {
-        const fullList = processSnapshot(snapshot);
-        setAllRecordsCount(fullList.length);
+    const unsubscribe = onChildAdded(recentRecordsQuery, (snapshot) => {
+        const newRecord = { id: snapshot.key, ...snapshot.val() };
         
-        // This keeps the currently viewed items in sync, adding new items to the top.
-        const currentLength = paginatedRecords.length > 0 ? paginatedRecords.length : PAGE_SIZE;
-        const updatedPaginatedList = fullList.slice(0, currentLength);
-        
-        setPaginatedRecords(updatedPaginatedList);
-        setHasMore(fullList.length > updatedPaginatedList.length);
-        if (loading) setLoading(false);
+        setPaginatedRecords(prevRecords => {
+            // Avoid adding duplicates
+            if(prevRecords.some(r => r.id === newRecord.id)) {
+                return prevRecords;
+            }
+            return [newRecord, ...prevRecords];
+        });
+        setAllRecordsCount(prevCount => prevCount + 1);
     });
 
     return () => unsubscribe();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const addRecord = async ({ studentName, floorNumber, location, photo }: NewRecord) => {
@@ -161,6 +164,8 @@ export function AttendanceProvider({ children }: { children: ReactNode }) {
   const removeRecord = async (id: string) => {
     const recordRef = ref(db, `attendance/${id}`);
     await remove(recordRef);
+    setPaginatedRecords(prev => prev.filter(r => r.id !== id));
+    setAllRecordsCount(prev => prev -1);
   };
 
   return (

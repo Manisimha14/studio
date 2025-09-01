@@ -20,7 +20,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Users, Trash2, Loader2, ListX, ArrowDown } from "lucide-react";
 import Image from "next/image";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useAttendance } from "@/context/AttendanceContext";
 import {
   AlertDialog,
@@ -47,6 +47,7 @@ export default function AdminDashboard() {
     fetchMoreRecords,
     loadingMore,
     hasMore,
+    fetchInitialRecords,
   } = useAttendance();
   const { toast } = useToast();
   
@@ -58,6 +59,10 @@ export default function AdminDashboard() {
   const [playSuccess] = useSound('/sounds/success.mp3', { volume: 0.5 });
   const [playError] = useSound('/sounds/error.mp3', { volume: 0.5 });
   
+  useEffect(() => {
+    fetchInitialRecords();
+  }, [fetchInitialRecords]);
+
   const handleDelete = async () => {
     playDelete();
     if (recordToDelete !== null) {
@@ -197,7 +202,7 @@ export default function AdminDashboard() {
             </Table>
         </div>
          <div className="mt-6 flex items-center justify-center">
-            {hasMore && (
+            {hasMore && !loading && (
                 <Button
                     variant="outline"
                     onClick={() => { playClick(); fetchMoreRecords();}}
@@ -211,7 +216,7 @@ export default function AdminDashboard() {
                     Load More
                 </Button>
             )}
-            {!hasMore && paginatedRecords.length > 0 && (
+            {!hasMore && paginatedRecords.length > 0 && !loading && (
                 <div className="text-sm text-muted-foreground">
                     You've reached the end of the list.
                 </div>
