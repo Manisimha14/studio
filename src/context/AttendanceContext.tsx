@@ -158,14 +158,13 @@ export function AttendanceProvider({ children }: { children: ReactNode }) {
     today.setHours(0, 0, 0, 0);
     const startOfToday = today.getTime();
 
-    const studentQuery = query(attendanceRef, orderByChild('studentName'), equalTo(studentName));
-    const snapshot = await get(studentQuery);
+    const snapshot = await get(attendanceRef);
 
     if (snapshot.exists()) {
         const records = snapshot.val();
         for (const key in records) {
             const record = records[key];
-            if (record.timestamp >= startOfToday) {
+            if (record.studentName === studentName && record.timestamp >= startOfToday) {
                  if (record.deviceId !== deviceId) {
                     throw new Error("Attendance already marked from a different device today.");
                  } else {
@@ -217,5 +216,3 @@ export function useAttendance() {
   }
   return context;
 }
-
-    
