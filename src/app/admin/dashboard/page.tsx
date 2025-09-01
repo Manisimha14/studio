@@ -18,7 +18,7 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Users, Trash2, Loader2, ListX, ArrowDown } from "lucide-react";
+import { Users, Trash2, Loader2, ListX, ArrowDown, Sparkles } from "lucide-react";
 import Image from "next/image";
 import { useState, useEffect, useCallback } from "react";
 import { useAttendance } from "@/context/AttendanceContext";
@@ -41,6 +41,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { format } from 'date-fns';
 import { playSound } from "@/lib/utils";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
 
 export default function AdminDashboard() {
@@ -111,16 +112,15 @@ export default function AdminDashboard() {
                 <TableRow>
                   <TableHead>Photo</TableHead>
                   <TableHead>Student</TableHead>
-                  <TableHead>Floor</TableHead>
+                  <TableHead>Details</TableHead>
                   <TableHead>Timestamp</TableHead>
-                  <TableHead>Location</TableHead>
                   <TableHead className="text-right">Action</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {loading ? (
                     <TableRow>
-                        <TableCell colSpan={6} className="h-48 text-center">
+                        <TableCell colSpan={5} className="h-48 text-center">
                             <div className="flex flex-col items-center gap-2 text-muted-foreground">
                                 <Loader2 className="h-8 w-8 animate-spin" />
                                 <span>Loading initial records...</span>
@@ -129,7 +129,7 @@ export default function AdminDashboard() {
                     </TableRow>
                 ) : paginatedRecords.length === 0 ? (
                     <TableRow>
-                        <TableCell colSpan={6} className="h-48 text-center">
+                        <TableCell colSpan={5} className="h-48 text-center">
                             <div className="flex flex-col items-center gap-2 text-muted-foreground">
                                 <ListX className="h-8 w-8" />
                                 <span>No attendance records found.</span>
@@ -159,23 +159,34 @@ export default function AdminDashboard() {
                                 height={600}
                                 className="w-full rounded-lg"
                               />
+                               {record.livenessChallenge && (
+                                <Alert className="mt-4">
+                                  <Sparkles className="h-4 w-4" />
+                                  <AlertTitle>Liveness Challenge</AlertTitle>
+                                  <AlertDescription>
+                                    Admin, please verify if the student is performing this action: <strong>{record.livenessChallenge}</strong>
+                                  </AlertDescription>
+                                </Alert>
+                              )}
                             </DialogContent>
                           </Dialog>
                         ) : (
-                          "No Photo"
+                          <div className="h-16 w-16 rounded-md bg-muted flex items-center justify-center text-xs text-muted-foreground">
+                            No Photo
+                          </div>
                         )}
                       </TableCell>
                       <TableCell className="font-medium">
                         {record.studentName}
                       </TableCell>
-                      <TableCell>{record.floorNumber}</TableCell>
-                      <TableCell>{format(new Date(record.timestamp), "PPpp")}</TableCell>
                       <TableCell>
-                        <div className="text-xs text-muted-foreground">
+                        <div className="text-sm">Floor: {record.floorNumber}</div>
+                         <div className="text-xs text-muted-foreground">
                           {record.location.latitude.toFixed(4)},{" "}
                           {record.location.longitude.toFixed(4)}
                         </div>
                       </TableCell>
+                      <TableCell>{format(new Date(record.timestamp), "PPpp")}</TableCell>
                       <TableCell className="text-right">
                          <AlertDialog>
                           <AlertDialogTrigger asChild>
@@ -237,3 +248,5 @@ export default function AdminDashboard() {
     </Card>
   );
 }
+
+    

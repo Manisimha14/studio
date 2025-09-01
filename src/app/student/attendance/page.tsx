@@ -150,7 +150,7 @@ export default function AttendancePage() {
   useEffect(() => {
     const isCameraStep = step === 2 || (step === 3 && !snapshot);
     
-    if (isCameraStep) {
+    if (isCameraStep && hasCameraPermission === null) {
         getCameraPermission();
     }
 
@@ -160,7 +160,7 @@ export default function AttendancePage() {
         stream.getTracks().forEach(track => track.stop());
       }
     };
-  }, [step, snapshot, getCameraPermission]);
+  }, [step, snapshot, getCameraPermission, hasCameraPermission]);
 
 
   const handleCapture = useCallback(() => {
@@ -190,7 +190,8 @@ export default function AttendancePage() {
   const handleRetake = useCallback(() => {
     playSound('click');
     setSnapshot(null);
-  }, []);
+    getCameraPermission(); // Re-request camera access
+  }, [getCameraPermission]);
 
   const handleProceedToLiveness = useCallback(() => {
      playSound('click');
@@ -240,6 +241,7 @@ export default function AttendancePage() {
           location: location!, 
           photo: snapshot,
           deviceId: deviceId,
+          livenessChallenge: livenessChallenge
         });
         playSound('success');
         setStep(4);
@@ -261,7 +263,7 @@ export default function AttendancePage() {
     } finally {
         setIsSubmitting(false);
     }
-  }, [snapshot, addRecord, studentName, floorNumber, location, toast, router, deviceId]);
+  }, [snapshot, addRecord, studentName, floorNumber, location, toast, router, deviceId, livenessChallenge]);
 
   const isFormDisabled = isSubmitting;
 
@@ -509,7 +511,7 @@ export default function AttendancePage() {
                 <Button
                     onClick={handleMarkAttendance}
                     disabled={isFormDisabled || !snapshot}
-                    className="w-full py-6 text-lg font-bold transition-all hover:scale-105 active:scale-100"
+                    className="w-full py-6 text-lg font-bold transition-all hover:scale-105 active-scale-100"
                 >
                     {isSubmitting ? (
                     <Loader2 className="mr-2 h-5 w-5 animate-spin" />
