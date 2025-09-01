@@ -18,9 +18,9 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Users, ArrowLeft, ArrowRight, Trash2 } from "lucide-react";
+import { Users, ArrowLeft, ArrowRight, Trash2, Loader2 } from "lucide-react";
 import Image from "next/image";
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { AttendanceRecord, useAttendance } from "@/context/AttendanceContext";
 import {
   AlertDialog,
@@ -34,20 +34,18 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
+import { format } from 'date-fns';
 
 
 const RECORDS_PER_PAGE = 5;
 
-export default function AdminDashboard({
-  records: initialRecords,
-}: {
-  records: AttendanceRecord[];
-}) {
+export default function AdminDashboard() {
   const { records, removeRecord } = useAttendance();
   const [currentPage, setCurrentPage] = useState(1);
   const { toast } = useToast();
   
-  const [recordToDelete, setRecordToDelete] = useState<number | null>(null);
+  const [recordToDelete, setRecordToDelete] = useState<string | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
 
   const totalPages = Math.ceil(records.length / RECORDS_PER_PAGE);
@@ -67,16 +65,27 @@ export default function AdminDashboard({
     }
   };
   
-  const handleDelete = () => {
+  const handleDelete = async () => {
     if (recordToDelete !== null) {
-      removeRecord(recordToDelete);
-      toast({
-        title: "Record Deleted",
-        description: "The attendance record has been successfully deleted.",
-      });
-      setRecordToDelete(null);
-      if (currentRecords.length === 1 && currentPage > 1) {
-        setCurrentPage(currentPage - 1);
+      setIsDeleting(true);
+      try {
+        await removeRecord(recordToDelete);
+        toast({
+          title: "Record Deleted",
+          description: "The attendance record has been successfully deleted.",
+        });
+        if (currentRecords.length === 1 && currentPage > 1) {
+            setCurrentPage(currentPage - 1);
+        }
+      } catch (error) {
+        toast({
+            variant: "destructive",
+            title: "Deletion Failed",
+            description: "Could not delete the record. Please try again."
+        });
+      } finally {
+        setIsDeleting(false);
+        setRecordToDelete(null);
       }
     }
   };
@@ -112,7 +121,16 @@ export default function AdminDashboard({
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {currentRecords.length > 0 ? (
+                {records.length === 0 ? (
+                    <TableRow>
+                        <TableCell colSpan={6} className="h-32 text-center">
+                            <div className="flex flex-col items-center gap-2 text-muted-foreground">
+                                <Loader2 className="h-8 w-8 animate-spin" />
+                                <span>Waiting for attendance records...</span>
+                            </div>
+                        </TableCell>
+                    </TableRow>
+                ) : currentRecords.length > 0 ? (
                   currentRecords.map((record) => (
                     <TableRow key={record.id}>
                       <TableCell>
@@ -132,7 +150,7 @@ export default function AdminDashboard({
                         {record.studentName}
                       </TableCell>
                       <TableCell>{record.floorNumber}</TableCell>
-                      <TableCell>{record.timestamp}</TableCell>
+                      <TableCell>{format(new Date(record.timestamp), "PPpp")}</TableCell>
                       <TableCell>
                         <div className="text-xs text-muted-foreground">
                           {record.location.latitude.toFixed(4)},{" "}
@@ -147,6 +165,7 @@ export default function AdminDashboard({
                               variant="destructive"
                               size="sm"
                               onClick={() => setRecordToDelete(record.id)}
+                              disabled={isDeleting}
                             >
                               <Trash2 className="mr-2 h-4 w-4" />
                               Delete
@@ -161,7 +180,10 @@ export default function AdminDashboard({
                             </AlertDialogHeader>
                             <AlertDialogFooter>
                               <AlertDialogCancel onClick={() => setRecordToDelete(null)}>Cancel</AlertDialogCancel>
-                              <AlertDialogAction onClick={handleDelete}>Delete</AlertDialogAction>
+                              <AlertDialogAction onClick={handleDelete} disabled={isDeleting}>
+                                {isDeleting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                                Delete
+                              </AlertDialogAction>
                             </AlertDialogFooter>
                           </AlertDialogContent>
                         </AlertDialog>
@@ -171,7 +193,7 @@ export default function AdminDashboard({
                 ) : (
                   <TableRow>
                     <TableCell colSpan={6} className="h-24 text-center">
-                      No attendance records yet.
+                      No attendance records on this page.
                     </TableCell>
                   </TableRow>
                 )}

@@ -3,11 +3,13 @@
 
 import type { ReactNode } from "react";
 import { createContext, useContext, useState, useEffect } from "react";
+import { db } from "@/lib/firebase";
+import { ref, push, onValue, remove, serverTimestamp } from "firebase/database";
 
 export interface AttendanceRecord {
-  id: number;
+  id: string; // Firebase push keys are strings
   studentName: string;
-  timestamp: string;
+  timestamp: number; // Store as a server-side timestamp
   location: {
     latitude: number;
     longitude: number;
@@ -16,79 +18,55 @@ export interface AttendanceRecord {
   floorNumber: string;
 }
 
-interface StoredRecords {
-  timestamp: number;
-  records: AttendanceRecord[];
-}
-
 interface AttendanceContextType {
   records: AttendanceRecord[];
-  addRecord: (record: Omit<AttendanceRecord, "id">) => void;
-  removeRecord: (id: number) => void;
+  addRecord: (record: Omit<AttendanceRecord, "id" | "timestamp">) => Promise<void>;
+  removeRecord: (id: string) => Promise<void>;
 }
 
 const AttendanceContext = createContext<AttendanceContextType | undefined>(
   undefined
 );
 
-const STORAGE_KEY = 'attendanceRecords';
-const EXPIRATION_TIME = 2 * 60 * 60 * 1000; // 2 hours in milliseconds
-
 export function AttendanceProvider({ children }: { children: ReactNode }) {
   const [records, setRecords] = useState<AttendanceRecord[]>([]);
 
   useEffect(() => {
-    try {
-      const item = window.localStorage.getItem(STORAGE_KEY);
-      if (item) {
-        const storedData: StoredRecords = JSON.parse(item);
-        const now = new Date().getTime();
-
-        if (now - storedData.timestamp < EXPIRATION_TIME) {
-          setRecords(storedData.records);
-        } else {
-          // Data has expired, clear it
-          window.localStorage.removeItem(STORAGE_KEY);
-        }
+    const attendanceRef = ref(db, 'attendance');
+    
+    // Listen for real-time updates
+    const unsubscribe = onValue(attendanceRef, (snapshot) => {
+      const data = snapshot.val();
+      if (data) {
+        const loadedRecords: AttendanceRecord[] = Object.keys(data)
+          .map(key => ({
+            id: key,
+            ...data[key],
+          }))
+          .sort((a, b) => b.timestamp - a.timestamp); // Sort by most recent
+        setRecords(loadedRecords);
+      } else {
+        setRecords([]);
       }
-    } catch (error) {
-      console.error("Failed to read from localStorage", error);
-    }
-  }, []);
-  
-  const updateLocalStorage = (updatedRecords: AttendanceRecord[]) => {
-    try {
-        const dataToStore: StoredRecords = {
-            timestamp: new Date().getTime(),
-            records: updatedRecords,
-        };
-        window.localStorage.setItem(STORAGE_KEY, JSON.stringify(dataToStore));
-    } catch (error) {
-        console.error("Failed to write to localStorage", error);
-    }
-  };
+    });
 
-  const addRecord = (record: Omit<AttendanceRecord, "id">) => {
+    // Cleanup subscription on unmount
+    return () => unsubscribe();
+  }, []);
+
+  const addRecord = async (record: Omit<AttendanceRecord, "id" | "timestamp">) => {
+    const attendanceRef = ref(db, 'attendance');
     const newRecord = {
       ...record,
-      id: new Date().getTime(),
+      timestamp: serverTimestamp(),
     };
-    
-    setRecords((prevRecords) => {
-        const updatedRecords = [newRecord, ...prevRecords];
-        updateLocalStorage(updatedRecords);
-        return updatedRecords;
-    });
+    await push(attendanceRef, newRecord);
   };
   
-  const removeRecord = (id: number) => {
-    setRecords((prevRecords) => {
-        const updatedRecords = prevRecords.filter((record) => record.id !== id);
-        updateLocalStorage(updatedRecords);
-        return updatedRecords;
-    });
+  const removeRecord = async (id: string) => {
+    const recordRef = ref(db, `attendance/${id}`);
+    await remove(recordRef);
   };
-
 
   return (
     <AttendanceContext.Provider value={{ records, addRecord, removeRecord }}>

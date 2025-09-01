@@ -4,19 +4,16 @@
 import { useState, useEffect, type ReactNode } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import { Header } from '@/components/Header';
-import { useAttendance } from '@/context/AttendanceContext';
 import AdminLoginPage from './page';
 import Loading from '../loading';
 import AdminDashboard from './dashboard/page';
 
 function AdminDashboardLayout({ children, onLogout }: { children: ReactNode; onLogout: () => void }) {
-  const { records } = useAttendance();
-
   return (
     <div className="flex min-h-screen w-full flex-col">
       <Header title="Admin Portal" onLogout={onLogout} />
       <main className="flex flex-1 flex-col items-center justify-center p-4">
-        <AdminDashboard records={records} />
+        <AdminDashboard />
       </main>
     </div>
   );
@@ -41,7 +38,7 @@ function AdminContent() {
 
     if (isAuth && pathname === '/admin') {
       router.replace('/admin/dashboard');
-    } else if (!isAuth && pathname === '/admin/dashboard') {
+    } else if (!isAuth && pathname.startsWith('/admin/dashboard')) {
       router.replace('/admin');
     }
   }, [isAuthenticated, pathname, router]);
@@ -63,7 +60,7 @@ function AdminContent() {
     return <Loading />;
   }
   
-  if (!isAuthenticated && pathname === '/admin/dashboard') {
+  if (!isAuthenticated && pathname.startsWith('/admin/dashboard')) {
      return <Loading />;
   }
   
@@ -84,7 +81,7 @@ function AdminContent() {
 
   return (
     <AdminDashboardLayout onLogout={handleLogout}>
-       <AdminDashboard records={[]} />
+       <AdminDashboard />
     </AdminDashboardLayout>
   );
 }

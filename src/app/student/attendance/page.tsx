@@ -36,7 +36,7 @@ export default function AttendancePage() {
   const { addRecord } = useAttendance();
   const { toast } = useToast();
   const router = useRouter();
-  const [isLoading, setIsLoading] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [location, setLocation] = useState<{
     latitude: number;
     longitude: number;
@@ -134,7 +134,7 @@ export default function AttendancePage() {
   };
 
 
-  const handleMarkAttendance = () => {
+  const handleMarkAttendance = async () => {
     if (!studentName || !floorNumber) {
       toast({
         variant: "destructive",
@@ -170,24 +170,34 @@ export default function AttendancePage() {
       return;
     }
 
-    setIsLoading(true);
+    setIsSubmitting(true);
 
     const newRecord = {
       studentName,
       floorNumber,
-      timestamp: new Date().toLocaleString(),
       location,
       photo: snapshot,
     };
 
-    addRecord(newRecord);
-    setIsLoading(false);
-    setIsMarked(true);
-    toast({
-      title: "Success!",
-      description: "Thank you for marking the attendance.",
-    });
-    router.push("/");
+    try {
+        await addRecord(newRecord);
+        setIsMarked(true);
+        toast({
+          title: "Success!",
+          description: "Thank you for marking the attendance.",
+        });
+        // Redirect after a short delay to allow user to see success message
+        setTimeout(() => router.push("/"), 1000);
+    } catch (error) {
+        console.error("Error marking attendance:", error);
+        toast({
+            variant: "destructive",
+            title: "Submission Failed",
+            description: "Could not mark attendance. Please try again.",
+        });
+    } finally {
+        setIsSubmitting(false);
+    }
   };
 
   return (
@@ -210,7 +220,7 @@ export default function AttendancePage() {
                 value={studentName}
                 onChange={(e) => setStudentName(e.target.value)}
                 placeholder="e.g., Jane Doe"
-                disabled={isMarked}
+                disabled={isMarked || isSubmitting}
               />
             </div>
             <div className="space-y-2">
@@ -222,7 +232,7 @@ export default function AttendancePage() {
                 value={floorNumber}
                 onChange={(e) => setFloorNumber(e.target.value)}
                 placeholder="e.g., 4th Floor"
-                disabled={isMarked}
+                disabled={isMarked || isSubmitting}
               />
             </div>
           </div>
@@ -260,14 +270,14 @@ export default function AttendancePage() {
               <div className="flex gap-2">
                 <Button
                   onClick={handleCapture}
-                  disabled={!!snapshot || isMarked}
+                  disabled={!!snapshot || isMarked || isSubmitting}
                   className="flex-1"
                 >
                   <Camera className="mr-2" />
                   {snapshot ? "Snapshot Taken" : "Take Snapshot"}
                 </Button>
                 {snapshot && (
-                  <Button onClick={handleRetake} variant="outline"  disabled={isMarked}>
+                  <Button onClick={handleRetake} variant="outline"  disabled={isMarked || isSubmitting}>
                     Retake
                   </Button>
                 )}
@@ -306,15 +316,15 @@ export default function AttendancePage() {
         <CardFooter>
           <Button
             onClick={handleMarkAttendance}
-            disabled={isLoading || !location || !snapshot || isMarked}
+            disabled={isSubmitting || !location || !snapshot || isMarked}
             className="w-full py-6 text-lg font-bold"
           >
-            {isLoading ? (
+            {isSubmitting ? (
               <Loader2 className="mr-2 h-5 w-5 animate-spin" />
             ) : isMarked ? (
               <CheckCircle className="mr-2 h-5 w-5" />
             ) : null}
-            {isLoading
+            {isSubmitting
               ? "Marking..."
               : isMarked
               ? "Attendance Marked"
