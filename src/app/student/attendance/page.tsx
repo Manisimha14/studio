@@ -35,9 +35,16 @@ import {
   Ban,
   Smartphone,
   Sparkles,
+  Face,
+  UserCheck,
 } from "lucide-react";
 import { useGeolocator } from "@/hooks/use-geolocator";
 import { playSound } from "@/lib/utils";
+import {
+  FaceLandmarker,
+  FilesetResolver,
+  FaceLandmarkerResult,
+} from "@mediapipe/tasks-vision";
 
 // Simple UUID generator
 const getDeviceId = () => {
@@ -61,6 +68,9 @@ const LIVENESS_CHALLENGES = [
     "Hold up your right hand"
 ];
 
+let faceLandmarker: FaceLandmarker | undefined;
+let lastVideoTime = -1;
+
 export default function AttendancePage() {
   const { addRecord } = useAttendance();
   const { toast } = useToast();
@@ -75,8 +85,11 @@ export default function AttendancePage() {
   const [floorNumber, setFloorNumber] = useState("");
   const [deviceId, setDeviceId] = useState('');
   const [virtualCameraDetected, setVirtualCameraDetected] = useState(false);
+  const [faceDetected, setFaceDetected] = useState(false);
+  const [isMediaPipeLoading, setIsMediaPipeLoading] = useState(true);
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const animationFrameId = useRef<number>();
   
   const livenessChallenge = useMemo(() => LIVENESS_CHALLENGES[Math.floor(Math.random() * LIVENESS_CHALLENGES.length)], []);
 
@@ -84,6 +97,51 @@ export default function AttendancePage() {
     setDeviceId(getDeviceId());
   }, []);
 
+  const createFaceLandmarker = useCallback(async () => {
+    try {
+        const filesetResolver = await FilesetResolver.forVisionTasks(
+          "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm"
+        );
+        faceLandmarker = await FaceLandmarker.createFromOptions(filesetResolver, {
+          baseOptions: {
+            modelAssetPath: `https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task`,
+            delegate: "GPU"
+          },
+          outputFaceBlendshapes: true,
+          runningMode: "VIDEO",
+          numFaces: 1
+        });
+        setIsMediaPipeLoading(false);
+    } catch(error) {
+        console.error("Error creating FaceLandmarker: ", error);
+        toast({
+          variant: "destructive",
+          title: "Face Detection Failed",
+          description: "Could not load the face detection model. Please refresh and try again.",
+        });
+    }
+  }, [toast]);
+  
+  const predictWebcam = useCallback(() => {
+    if (!videoRef.current || !faceLandmarker) {
+      return;
+    }
+    
+    const video = videoRef.current;
+    if (video.currentTime !== lastVideoTime) {
+      lastVideoTime = video.currentTime;
+      const results: FaceLandmarkerResult = faceLandmarker.detectForVideo(video, Date.now());
+      
+      if (results.faceLandmarks && results.faceLandmarks.length > 0) {
+        setFaceDetected(true);
+      } else {
+        setFaceDetected(false);
+      }
+    }
+
+    animationFrameId.current = requestAnimationFrame(predictWebcam);
+  }, []);
+  
   const getCameraPermission = useCallback(async (isRetry = false) => {
     if (isRetry) {
         playSound('click');
@@ -125,6 +183,7 @@ export default function AttendancePage() {
       setHasCameraPermission(true);
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
+        videoRef.current.addEventListener('loadeddata', predictWebcam);
       }
     } catch (error) {
       console.error("Error accessing camera:", error);
@@ -145,24 +204,27 @@ export default function AttendancePage() {
         });
       }
     }
-  }, [toast]);
+  }, [toast, predictWebcam]);
+  
 
   useEffect(() => {
     const isCameraStep = step === 2 || (step === 3 && !snapshot);
     
     if (isCameraStep) {
-        // Request camera permission as soon as we enter a camera step
+        if (!faceLandmarker) {
+          createFaceLandmarker();
+        }
         getCameraPermission();
     }
 
     return () => {
-      // Cleanup: stop camera stream when component unmounts or step changes
+       cancelAnimationFrame(animationFrameId.current!);
       if (videoRef.current && videoRef.current.srcObject) {
         const stream = videoRef.current.srcObject as MediaStream;
         stream.getTracks().forEach(track => track.stop());
       }
     };
-  }, [step, snapshot, getCameraPermission]);
+  }, [step, snapshot, getCameraPermission, createFaceLandmarker]);
 
 
   const handleCapture = useCallback(() => {
@@ -180,6 +242,8 @@ export default function AttendancePage() {
         context.drawImage(video, 0, 0, canvas.width, canvas.height);
         const dataUrl = canvas.toDataURL("image/jpeg", 0.8);
         setSnapshot(dataUrl);
+        setFaceDetected(false); // Stop detection after capture
+        cancelAnimationFrame(animationFrameId.current!);
 
         const stream = video.srcObject as MediaStream;
         if(stream) {
@@ -316,6 +380,18 @@ export default function AttendancePage() {
         />
         <canvas ref={canvasRef} className="hidden" />
         
+        {step !== 1 && !snapshot && (
+           <div className="absolute bottom-2 right-2 z-10">
+              {isMediaPipeLoading ? (
+                  <Badge variant="secondary"><Loader2 className="mr-2 h-3 w-3 animate-spin"/>Loading AI</Badge>
+              ) : faceDetected ? (
+                  <Badge variant="default" className="bg-green-600"><UserCheck className="mr-2 h-3 w-3"/>Face Detected</Badge>
+              ) : (
+                  <Badge variant="destructive"><Face className="mr-2 h-3 w-3"/>No Face Detected</Badge>
+              )}
+           </div>
+        )}
+        
         {virtualCameraDetected && (
            <Alert variant="destructive" className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-center p-4">
                 <Ban className="h-10 w-10" />
@@ -348,7 +424,7 @@ export default function AttendancePage() {
             />
         )}
     </div>
-  ), [snapshot, virtualCameraDetected, hasCameraPermission, getCameraPermission]);
+  ), [snapshot, virtualCameraDetected, hasCameraPermission, getCameraPermission, faceDetected, isMediaPipeLoading, step]);
 
 
   if (step === 4) {
@@ -470,7 +546,7 @@ export default function AttendancePage() {
                 </Alert>
             </CardContent>
             <CardFooter className="flex-col gap-4">
-                 <Button onClick={handleProceedToSnapshot} disabled={!hasCameraPermission} className="w-full py-6 text-lg font-semibold transition-all hover:scale-105 active:scale-100">
+                 <Button onClick={handleProceedToSnapshot} disabled={!hasCameraPermission || !faceDetected} className="w-full py-6 text-lg font-semibold transition-all hover:scale-105 active:scale-100">
                     I'm Ready, Go to Snapshot
                  </Button>
                  <Button variant="link" onClick={() => { playSound('click'); setStep(1); }} disabled={isFormDisabled}>
@@ -495,7 +571,7 @@ export default function AttendancePage() {
                 <div className="flex gap-2">
                 <Button
                     onClick={handleCapture}
-                    disabled={!!snapshot || !hasCameraPermission || isFormDisabled}
+                    disabled={!!snapshot || !hasCameraPermission || isFormDisabled || !faceDetected}
                     className="flex-1 transition-all hover:scale-105 active-scale-100"
                 >
                     <Camera className="mr-2" />
@@ -533,5 +609,3 @@ export default function AttendancePage() {
     </div>
   );
 }
-
-    
