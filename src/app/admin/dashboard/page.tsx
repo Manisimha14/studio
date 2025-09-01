@@ -37,7 +37,7 @@ import {
   Dialog,
   DialogContent,
   DialogTrigger,
-} from "@/components/ui/dialog"
+} from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { format } from 'date-fns';
 import { playSound } from "@/lib/utils";
@@ -248,5 +248,3 @@ export default function AdminDashboard() {
     </Card>
   );
 }
-
-    
