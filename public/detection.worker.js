@@ -1,17 +1,21 @@
 // public/detection.worker.js
+console.log("Worker: Script loaded.");
 
 // Import the MediaPipe Vision library from the CDN
 self.importScripts("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/wasm/vision_bundle.js");
+console.log("Worker: MediaPipe scripts imported.");
 
 let objectDetector;
 
 // Listen for messages from the main React component
 self.onmessage = async (event) => {
+  console.log("Worker: Received message:", event.data);
   const { type, frame } = event.data;
 
   // This block runs once to initialize the detector
   if (type === 'init') {
     try {
+      console.log("Worker: Initializing detector...");
       const vision = await self.FilesetResolver.forVisionTasks(
         "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/wasm"
       );
@@ -20,12 +24,15 @@ self.onmessage = async (event) => {
           modelAssetPath: `/efficientdet_lite0.task`,
           delegate: "GPU",
         },
-        scoreThreshold: 0.55, // Slightly higher threshold can be faster
+        scoreThreshold: 0.55,
         runningMode: "VIDEO",
       });
+      console.log("Worker: Detector initialized successfully.");
       // Tell the main thread that initialization is complete
       self.postMessage({ type: 'ready' });
+      console.log("Worker: Sent 'ready' message.");
     } catch (error) {
+      console.error("Worker: Initialization FAILED:", error);
       // Inform the main thread if initialization fails
       self.postMessage({ type: 'error', error: error.message });
     }
