@@ -55,13 +55,13 @@ const useGeolocator = (options?: PositionOptions): GeolocationResult => {
       setError(error);
     };
 
-    // Use watchPosition to get continuous updates, which is better for "live" tracking
-    const watcherId = navigator.geolocation.watchPosition(successHandler, errorHandler, options);
+    // Use getCurrentPosition for a one-time, faster location fix.
+    // Added a timeout to avoid getting stuck.
+    navigator.geolocation.getCurrentPosition(successHandler, errorHandler, {
+      ...options,
+      timeout: 10000, // 10 seconds
+    });
 
-    // Clean up the watcher when the component unmounts
-    return () => {
-      navigator.geolocation.clearWatch(watcherId);
-    };
   }, [options]);
 
   return { status, location, error };
