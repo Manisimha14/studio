@@ -20,7 +20,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Users, Trash2, Loader2, ListX, ArrowDown } from "lucide-react";
 import Image from "next/image";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useAttendance } from "@/context/AttendanceContext";
 import {
   AlertDialog,
@@ -63,7 +63,7 @@ export default function AdminDashboard() {
     fetchInitialRecords();
   }, [fetchInitialRecords]);
 
-  const handleDelete = async () => {
+  const handleDelete = useCallback(async () => {
     playSound('delete');
     if (recordToDelete !== null) {
       setIsDeleting(true);
@@ -86,7 +86,7 @@ export default function AdminDashboard() {
         setRecordToDelete(null);
       }
     }
-  };
+  }, [recordToDelete, removeRecord, toast]);
 
   return (
     <Card className="w-full max-w-6xl fade-in shadow-xl">
@@ -138,7 +138,7 @@ export default function AdminDashboard() {
                     </TableRow>
                 ) : (
                   paginatedRecords.map((record) => (
-                    <TableRow key={record.id} className="transition-colors hover:bg-muted/50">
+                    <TableRow key={record.id} className="fade-in transition-colors hover:bg-muted/50">
                       <TableCell>
                         {record.photo ? (
                           <Dialog>
@@ -183,7 +183,7 @@ export default function AdminDashboard() {
                               variant="destructive"
                               size="sm"
                               onClick={() => { playSound('click'); setRecordToDelete(record.id); }}
-                              disabled={isDeleting}
+                              disabled={isDeleting && recordToDelete === record.id}
                             >
                               <Trash2 className="mr-2 h-4 w-4" />
                               Delete

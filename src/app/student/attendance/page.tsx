@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useState, useRef, useEffect, useMemo } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import {
@@ -54,7 +54,7 @@ export default function AttendancePage() {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
-  const getCameraPermission = async () => {
+  const getCameraPermission = useCallback(async () => {
     setVirtualCameraDetected(false);
     try {
        const devices = await navigator.mediaDevices.enumerateDevices();
@@ -112,7 +112,7 @@ export default function AttendancePage() {
         });
       }
     }
-  };
+  }, [toast]);
 
   useEffect(() => {
     if (step === 2 && !snapshot) {
@@ -124,10 +124,10 @@ export default function AttendancePage() {
         stream.getTracks().forEach(track => track.stop());
       }
     };
-  }, [step, snapshot]);
+  }, [step, snapshot, getCameraPermission]);
 
 
-  const handleCapture = () => {
+  const handleCapture = useCallback(() => {
     playSound('capture');
     if (videoRef.current && canvasRef.current) {
       const video = videoRef.current;
@@ -149,14 +149,14 @@ export default function AttendancePage() {
         }
       }
     }
-  };
+  }, []);
 
-  const handleRetake = () => {
+  const handleRetake = useCallback(() => {
     playSound('click');
     setSnapshot(null);
-  };
+  }, []);
 
-  const handleNextStep = () => {
+  const handleNextStep = useCallback(() => {
      playSound('click');
      if (!studentName || !floorNumber) {
       playSound('error');
@@ -177,10 +177,10 @@ export default function AttendancePage() {
       return;
     }
     setStep(2);
-  }
+  }, [studentName, floorNumber, location, toast]);
 
 
-  const handleMarkAttendance = async () => {
+  const handleMarkAttendance = useCallback(async () => {
     playSound('click');
     if (!snapshot) {
         playSound('error');
@@ -219,11 +219,11 @@ export default function AttendancePage() {
     } finally {
         setIsSubmitting(false);
     }
-  };
+  }, [snapshot, addRecord, studentName, floorNumber, location, toast, router]);
 
   const isFormDisabled = isSubmitting;
 
-  const renderLocationStatus = () => {
+  const renderLocationStatus = useCallback(() => {
     switch (status) {
       case 'pending':
         return (
@@ -257,7 +257,7 @@ export default function AttendancePage() {
       default:
         return null;
     }
-  };
+  }, [status, error, location]);
   
   if (step === 3) {
       return (

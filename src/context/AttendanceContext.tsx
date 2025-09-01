@@ -16,6 +16,7 @@ import {
   limitToLast,
   onChildAdded,
   startAt,
+  get,
 } from "firebase/database";
 
 export interface AttendanceRecord {
@@ -83,10 +84,9 @@ export function AttendanceProvider({ children }: { children: ReactNode }) {
      setLoading(true);
      const attendanceRef = ref(db, 'attendance');
      
-     const totalRecordsQuery = query(attendanceRef);
-     onValue(totalRecordsQuery, (snapshot) => {
+     get(attendanceRef).then((snapshot) => {
         setAllRecordsCount(snapshot.size);
-     }, { onlyOnce: true });
+     });
 
      const recordsQuery = query(attendanceRef, orderByChild('timestamp'), limitToLast(PAGE_SIZE));
      onValue(recordsQuery, (snapshot) => {
@@ -138,7 +138,8 @@ export function AttendanceProvider({ children }: { children: ReactNode }) {
             if(prevRecords.some(r => r.id === newRecord.id)) {
                 return prevRecords;
             }
-            return [newRecord, ...prevRecords];
+            const updatedRecords = [newRecord, ...prevRecords];
+            return updatedRecords.sort((a, b) => b.timestamp - a.timestamp);
         });
         setAllRecordsCount(prevCount => prevCount + 1);
     });
@@ -162,7 +163,7 @@ export function AttendanceProvider({ children }: { children: ReactNode }) {
     const recordRef = ref(db, `attendance/${id}`);
     await remove(recordRef);
     setPaginatedRecords(prev => prev.filter(r => r.id !== id));
-    setAllRecordsCount(prev => prev -1);
+    setAllRecordsCount(prev => prev - 1);
   };
 
   return (
