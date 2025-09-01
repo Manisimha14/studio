@@ -105,7 +105,7 @@ export default function AttendancePage() {
       const context = canvas.getContext("2d");
       if (context) {
         context.drawImage(video, 0, 0, video.videoWidth, video.videoHeight);
-        const dataUrl = canvas.toDataURL("image/png");
+        const dataUrl = canvas.toDataURL("image/jpeg", 0.5);
         setSnapshot(dataUrl);
 
         // Stop the camera stream after taking a snapshot
