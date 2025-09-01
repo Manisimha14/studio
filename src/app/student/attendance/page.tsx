@@ -33,10 +33,24 @@ import {
   RefreshCw,
   ArrowLeft,
   Ban,
+  Smartphone,
 } from "lucide-react";
 import { useGeolocator } from "@/hooks/use-geolocator";
 import { playSound } from "@/lib/utils";
 
+// Simple UUID generator
+const getDeviceId = () => {
+  if (typeof window === 'undefined') return '';
+  let deviceId = localStorage.getItem('device-id');
+  if (!deviceId) {
+    deviceId = 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+        const r = Math.random() * 16 | 0, v = c == 'x' ? r : (r & 0x3 | 0x8);
+        return v.toString(16);
+    });
+    localStorage.setItem('device-id', deviceId);
+  }
+  return deviceId;
+};
 
 export default function AttendancePage() {
   const { addRecord } = useAttendance();
@@ -50,9 +64,14 @@ export default function AttendancePage() {
   const [snapshot, setSnapshot] = useState<string | null>(null);
   const [studentName, setStudentName] = useState("");
   const [floorNumber, setFloorNumber] = useState("");
+  const [deviceId, setDeviceId] = useState('');
   const [virtualCameraDetected, setVirtualCameraDetected] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+
+  useEffect(() => {
+    setDeviceId(getDeviceId());
+  }, []);
 
   const getCameraPermission = useCallback(async () => {
     setVirtualCameraDetected(false);
@@ -194,10 +213,11 @@ export default function AttendancePage() {
     setIsSubmitting(true);
     try {
         await addRecord({ 
-          studentName, 
+          studentName: studentName.trim(), 
           floorNumber, 
           location: location!, 
           photo: snapshot,
+          deviceId: deviceId,
         });
         playSound('success');
         setStep(3);
@@ -219,7 +239,7 @@ export default function AttendancePage() {
     } finally {
         setIsSubmitting(false);
     }
-  }, [snapshot, addRecord, studentName, floorNumber, location, toast, router]);
+  }, [snapshot, addRecord, studentName, floorNumber, location, toast, router, deviceId]);
 
   const isFormDisabled = isSubmitting;
 
@@ -330,6 +350,14 @@ export default function AttendancePage() {
                 </Label>
                 {renderLocationStatus()}
             </div>
+             <Alert variant="default" className="border-blue-500/50 bg-blue-500/10 text-blue-700">
+                <Smartphone className="h-4 w-4 text-blue-600" />
+                <AlertTitle>Device Verification</AlertTitle>
+                <AlertDescription>
+                    Your attendance will be locked to this device for today.
+                    <p className="mt-1 text-xs truncate text-muted-foreground">Device ID: {deviceId}</p>
+                </AlertDescription>
+            </Alert>
             </CardContent>
             <CardFooter>
                  <Button onClick={handleNextStep} disabled={!location || isFormDisabled} className="w-full py-6 text-lg font-semibold transition-all hover:scale-105 active:scale-100">
@@ -425,3 +453,5 @@ export default function AttendancePage() {
     </div>
   );
 }
+
+    

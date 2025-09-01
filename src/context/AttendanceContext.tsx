@@ -17,6 +17,7 @@ import {
   onChildAdded,
   startAt,
   get,
+  equalTo,
 } from "firebase/database";
 
 export interface AttendanceRecord {
@@ -29,6 +30,7 @@ export interface AttendanceRecord {
   };
   photo: string | null;
   floorNumber: string;
+  deviceId: string;
 }
 
 interface NewRecord {
@@ -39,6 +41,7 @@ interface NewRecord {
         longitude: number;
     };
     photo: string;
+    deviceId: string;
 }
 
 interface AttendanceContextType {
@@ -147,13 +150,37 @@ export function AttendanceProvider({ children }: { children: ReactNode }) {
     return () => unsubscribe();
   }, []);
 
-  const addRecord = async ({ studentName, floorNumber, location, photo }: NewRecord) => {
+  const addRecord = async ({ studentName, floorNumber, location, photo, deviceId }: NewRecord) => {
     const attendanceRef = ref(db, 'attendance');
+    
+    // Check if attendance for this student was already marked today
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const startOfToday = today.getTime();
+
+    const studentQuery = query(attendanceRef, orderByChild('studentName'), equalTo(studentName));
+    const snapshot = await get(studentQuery);
+
+    if (snapshot.exists()) {
+        const records = snapshot.val();
+        for (const key in records) {
+            const record = records[key];
+            if (record.timestamp >= startOfToday) {
+                 if (record.deviceId !== deviceId) {
+                    throw new Error("Attendance already marked from a different device today.");
+                 } else {
+                    throw new Error("You have already marked your attendance today from this device.");
+                 }
+            }
+        }
+    }
+
     const newRecordPayload = {
       studentName,
       floorNumber,
       location,
       photo,
+      deviceId,
       timestamp: serverTimestamp(),
     };
     await push(attendanceRef, newRecordPayload);
@@ -190,3 +217,5 @@ export function useAttendance() {
   }
   return context;
 }
+
+    
