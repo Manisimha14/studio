@@ -6,15 +6,12 @@ import { createContext, useContext, useState, useEffect, useCallback } from "rea
 import { db } from "@/lib/firebase";
 import { 
   ref, 
-  push, 
   onValue, 
   remove, 
   serverTimestamp, 
   query, 
   orderByChild, 
-  limitToLast,
-  endBefore,
-  get
+  limitToLast
 } from "firebase/database";
 
 export interface AttendanceRecord {
@@ -59,7 +56,6 @@ const PAGE_SIZE = 10;
 
 export function AttendanceProvider({ children }: { children: ReactNode }) {
   const [paginatedRecords, setPaginatedRecords] = useState<AttendanceRecord[]>([]);
-  const [allRecords, setAllRecords] = useState<AttendanceRecord[]>([]);
   const [allRecordsCount, setAllRecordsCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -80,25 +76,48 @@ export function AttendanceProvider({ children }: { children: ReactNode }) {
 
   const fetchInitialRecords = useCallback(() => {
      setLoading(true);
-     const paginated = allRecords.slice(0, PAGE_SIZE);
-     setPaginatedRecords(paginated);
-     setHasMore(allRecords.length > PAGE_SIZE);
-     setLoading(false);
-  }, [allRecords]);
-
+     const attendanceRef = ref(db, 'attendance');
+     const recordsQuery = query(attendanceRef, orderByChild('timestamp'));
+     onValue(recordsQuery, (snapshot) => {
+         const fullList = processSnapshot(snapshot);
+         setAllRecordsCount(fullList.length);
+         const paginated = fullList.slice(0, PAGE_SIZE);
+         setPaginatedRecords(paginated);
+         setHasMore(fullList.length > PAGE_SIZE);
+         setLoading(false);
+     }, { onlyOnce: true });
+  }, []);
 
   const fetchMoreRecords = useCallback(() => {
-    if (!hasMore || loadingMore) return;
+    if (!hasMore || loadingMore || paginatedRecords.length === 0) return;
     
     setLoadingMore(true);
-    const currentLength = paginatedRecords.length;
-    const nextRecords = allRecords.slice(currentLength, currentLength + PAGE_SIZE);
-    
-    setPaginatedRecords(prev => [...prev, ...nextRecords]);
-    setHasMore(allRecords.length > currentLength + PAGE_SIZE);
+    const lastRecord = paginatedRecords[paginatedRecords.length - 1];
+    const attendanceRef = ref(db, 'attendance');
+    const recordsQuery = query(
+      attendanceRef, 
+      orderByChild('timestamp')
+    );
 
-    setLoadingMore(false);
-  }, [hasMore, loadingMore, paginatedRecords.length, allRecords]);
+    onValue(recordsQuery, (snapshot) => {
+      const fullList = processSnapshot(snapshot);
+      const lastRecordIndex = fullList.findIndex(r => r.id === lastRecord.id);
+      
+      if (lastRecordIndex !== -1) {
+        const nextRecords = fullList.slice(lastRecordIndex + 1, lastRecordIndex + 1 + PAGE_SIZE);
+        if (nextRecords.length > 0) {
+            setPaginatedRecords(prev => [...prev, ...nextRecords]);
+            setHasMore(fullList.length > paginatedRecords.length + nextRecords.length);
+        } else {
+            setHasMore(false);
+        }
+      } else {
+        setHasMore(false);
+      }
+      setLoadingMore(false);
+    }, { onlyOnce: true });
+
+  }, [hasMore, loadingMore, paginatedRecords]);
 
 
   useEffect(() => {
@@ -108,17 +127,20 @@ export function AttendanceProvider({ children }: { children: ReactNode }) {
     
     const unsubscribe = onValue(recordsQuery, (snapshot) => {
         const fullList = processSnapshot(snapshot);
-        setAllRecords(fullList);
         setAllRecordsCount(fullList.length);
         
-        const paginated = fullList.slice(0, paginatedRecords.length || PAGE_SIZE);
-        setPaginatedRecords(paginated);
-        setHasMore(fullList.length > paginated.length);
+        // Update paginated records with the new data, respecting current pagination
+        const currentLength = paginatedRecords.length > 0 ? paginatedRecords.length : PAGE_SIZE;
+        const updatedPaginatedList = fullList.slice(0, currentLength);
+        
+        setPaginatedRecords(updatedPaginatedList);
+        setHasMore(fullList.length > updatedPaginatedList.length);
         setLoading(false);
     });
 
     return () => unsubscribe();
-  }, [paginatedRecords.length]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const addRecord = async ({ studentName, floorNumber, location, photo }: NewRecord) => {
     const attendanceRef = ref(db, 'attendance');
