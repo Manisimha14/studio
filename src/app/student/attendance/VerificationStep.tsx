@@ -10,7 +10,6 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { useToast } from "@/hooks/use-toast";
 import {
   Alert,
   AlertTitle,
@@ -18,8 +17,6 @@ import {
 } from "@/components/ui/alert";
 import {
   Loader2,
-  Camera,
-  CheckCircle,
   VideoOff,
   AlertTriangle,
   RefreshCw,
@@ -52,7 +49,6 @@ let lastVideoTime = -1;
 let animationFrameId: number;
 
 export default function VerificationStep({ livenessChallenge, onVerified, isSubmitting, onBack }: VerificationStepProps) {
-  const { toast } = useToast();
   const [status, setStatus] = useState<"initializing" | "loading_model" | "ready" | "error" | "permission_denied" | "virtual_camera">("initializing");
   const [faceDetected, setFaceDetected] = useState(false);
   const [livenessChallengeMet, setLivenessChallengeMet] = useState(false);
@@ -114,13 +110,13 @@ export default function VerificationStep({ livenessChallenge, onVerified, isSubm
   }, [livenessChallenge.key]);
 
   const predictWebcam = useCallback(() => {
-    if (!videoRef.current || !faceLandmarker || videoRef.current.paused || videoRef.current.ended) {
+    if (!faceLandmarker || !videoRef.current || videoRef.current.paused || videoRef.current.ended) {
       animationFrameId = requestAnimationFrame(predictWebcam);
       return;
     }
     
     const video = videoRef.current;
-    if (video.currentTime !== lastVideoTime && video.videoWidth > 0) {
+    if (video.readyState >= 2 && video.videoWidth > 0 && video.currentTime !== lastVideoTime) {
       lastVideoTime = video.currentTime;
       const results: FaceLandmarkerResult = faceLandmarker.detectForVideo(video, Date.now());
       
@@ -141,26 +137,33 @@ export default function VerificationStep({ livenessChallenge, onVerified, isSubm
   const setup = useCallback(async (isRetry = false) => {
       if (isRetry) playSound('click');
       setStatus("initializing");
+      setLivenessChallengeMet(false);
+      
+      if (videoRef.current && videoRef.current.srcObject) {
+         (videoRef.current.srcObject as MediaStream).getTracks().forEach(track => track.stop());
+      }
+      if (faceLandmarker) {
+        faceLandmarker.close();
+        faceLandmarker = undefined;
+      }
+      cancelAnimationFrame(animationFrameId);
 
       try {
+        const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' } });
+        
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+          await videoRef.current.play();
+        }
+        
         const devices = await navigator.mediaDevices.enumerateDevices();
         const videoInputs = devices.filter(device => device.kind === 'videoinput');
-        
         if (videoInputs.length === 0) throw new Error("No camera found.");
-
         const suspiciousKeywords = ['obs', 'droidcam', 'splitcam', 'vcam', 'virtual', 'proxy'];
-        const isVirtualCamera = videoInputs.some(device => suspiciousKeywords.some(keyword => device.label.toLowerCase().includes(keyword)));
-        const hasPhysicalCamera = videoInputs.some(device => !suspiciousKeywords.some(keyword => device.label.toLowerCase().includes(keyword)));
-
-        if (isVirtualCamera && !hasPhysicalCamera) {
+        if (videoInputs.some(device => suspiciousKeywords.some(keyword => device.label.toLowerCase().includes(keyword)))) {
           setStatus("virtual_camera");
           playSound('error');
           return;
-        }
-
-        const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' } });
-        if (videoRef.current) {
-          videoRef.current.srcObject = stream;
         }
 
         setStatus("loading_model");
@@ -174,11 +177,13 @@ export default function VerificationStep({ livenessChallenge, onVerified, isSubm
           runningMode: "VIDEO",
           numFaces: 1
         });
+
         setStatus("ready");
+
       } catch (error) {
         const err = error as Error;
         console.error("Setup failed:", err);
-        if (err.name === 'NotAllowedError') {
+        if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
             setStatus("permission_denied");
         } else {
             setStatus("error");
@@ -198,12 +203,16 @@ export default function VerificationStep({ livenessChallenge, onVerified, isSubm
       if (countdownIntervalRef.current) {
         clearInterval(countdownIntervalRef.current);
       }
-      faceLandmarker = undefined;
+      if (faceLandmarker) {
+        faceLandmarker.close();
+        faceLandmarker = undefined;
+      }
     };
   }, [setup]);
 
   useEffect(() => {
     if (status === "ready") {
+        lastVideoTime = -1;
         predictWebcam();
     }
   }, [status, predictWebcam]);
@@ -212,20 +221,27 @@ export default function VerificationStep({ livenessChallenge, onVerified, isSubm
     if (livenessChallengeMet) {
       if (!countdownIntervalRef.current) {
         countdownIntervalRef.current = setInterval(() => {
-          setCountdown(prev => prev - 1);
+          setCountdown(prev => {
+            if (prev <= 1) {
+              clearInterval(countdownIntervalRef.current!);
+              handleCapture();
+              return 0;
+            }
+            return prev - 1;
+          });
         }, 1000);
       }
     } else {
       resetChallenge();
     }
-  }, [livenessChallengeMet, resetChallenge]);
 
-  useEffect(() => {
-    if (countdown <= 0) {
-      clearInterval(countdownIntervalRef.current);
-      handleCapture();
+    return () => {
+        if(countdownIntervalRef.current) {
+            clearInterval(countdownIntervalRef.current);
+            countdownIntervalRef.current = undefined;
+        }
     }
-  }, [countdown, handleCapture]);
+  }, [livenessChallengeMet, resetChallenge, handleCapture]);
 
 
   const renderOverlay = () => {
@@ -247,7 +263,7 @@ export default function VerificationStep({ livenessChallenge, onVerified, isSubm
             );
         case "virtual_camera":
            return (
-             <Alert variant="destructive" className={commonClasses}>
+             <Alert variant="destructive" className={`${commonClasses} bg-destructive/90`}>
                   <Ban className="h-10 w-10" />
                   <AlertTitle>Physical Webcam Required</AlertTitle>
                   <AlertDescription>The use of virtual camera software is not permitted. Please use a physical webcam.</AlertDescription>
@@ -255,16 +271,16 @@ export default function VerificationStep({ livenessChallenge, onVerified, isSubm
            );
         case "permission_denied":
             return (
-              <Alert variant="destructive" className={commonClasses}>
+              <Alert variant="destructive" className={`${commonClasses} bg-destructive/90`}>
                   <VideoOff className="h-10 w-10" />
                   <AlertTitle>Camera Access Denied</AlertTitle>
-                  <AlertDescription>Please allow camera access in your browser settings and ensure a physical webcam is connected.</AlertDescription>
+                  <AlertDescription>Please allow camera access in your browser settings to continue.</AlertDescription>
                   <Button onClick={() => setup(true)}><RefreshCw className="mr-2"/>Try Again</Button>
               </Alert>
             );
         case "error":
             return (
-              <Alert variant="destructive" className={commonClasses}>
+              <Alert variant="destructive" className={`${commonClasses} bg-destructive/90`}>
                   <AlertTriangle className="h-10 w-10" />
                   <AlertTitle>An Error Occurred</AlertTitle>
                   <AlertDescription>Could not start verification. Please try again.</AlertDescription>
@@ -297,21 +313,16 @@ export default function VerificationStep({ livenessChallenge, onVerified, isSubm
         <div className="relative aspect-video w-full overflow-hidden rounded-lg border-2 border-dashed bg-muted">
             <video
                 ref={videoRef}
-                className={`h-full w-full object-cover transition-opacity duration-300 ${status === 'ready' ? 'opacity-100' : 'opacity-0'}`}
+                className={`h-full w-full object-cover scale-x-[-1] transition-opacity duration-300 ${status !== 'initializing' ? 'opacity-100' : 'opacity-0'}`}
                 autoPlay
                 muted
                 playsInline
-                onLoadedData={() => {
-                    if(videoRef.current) {
-                        videoRef.current.play().catch(e => console.error("Video play failed", e));
-                    }
-                }}
             />
             <canvas ref={canvasRef} className="hidden" />
             {renderOverlay()}
 
             {status === "ready" && !isSubmitting && (
-                <div className="absolute bottom-2 right-2 z-10 flex flex-col items-end gap-2">
+                <div className="absolute bottom-2 left-2 z-10 flex flex-col items-start gap-2">
                     <div className="flex gap-2">
                         {faceDetected ? (
                             <Badge variant="default" className="bg-green-600"><UserCheck className="mr-2 h-3 w-3"/>Face Detected</Badge>

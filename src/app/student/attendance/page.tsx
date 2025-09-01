@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useState, useMemo, Suspense, lazy } from "react";
+import { useState, useMemo, Suspense, lazy, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import {
@@ -72,9 +72,10 @@ export default function AttendancePage() {
 
   const livenessChallenge = useMemo(() => LIVENESS_CHALLENGES[Math.floor(Math.random() * LIVENESS_CHALLENGES.length)], []);
 
-  useState(() => {
+  useEffect(() => {
+    // This hook runs only on the client, after hydration
     setDeviceId(getDeviceId());
-  });
+  }, []);
 
   const handleProceedToVerification = () => {
      playSound('click');
@@ -100,7 +101,11 @@ export default function AttendancePage() {
   };
 
   const handleMarkAttendance = async (snapshot: string | null) => {
+    if (isSubmitting) return; // Prevent double submission
+    
+    setIsSubmitting(true);
     playSound('click');
+
     if (!snapshot) {
         playSound('error');
         toast({
@@ -108,9 +113,9 @@ export default function AttendancePage() {
             title: "Snapshot Required",
             description: "Could not capture a snapshot.",
         });
+        setIsSubmitting(false);
         return;
     }
-    setIsSubmitting(true);
     try {
         await addRecord({ 
           studentName: studentName.trim(), 
@@ -137,9 +142,8 @@ export default function AttendancePage() {
             title: "Submission Failed",
             description: errorMessage,
         });
-    } finally {
         setIsSubmitting(false);
-    }
+    } 
   };
 
   const renderLocationStatus = () => {
@@ -247,17 +251,19 @@ export default function AttendancePage() {
                   </Label>
                   {renderLocationStatus()}
               </div>
-               <Alert variant="default" className="border-blue-500/50 bg-blue-500/10 text-blue-700">
-                  <Smartphone className="h-4 w-4 text-blue-600" />
-                  <AlertTitle>Device Verification</AlertTitle>
-                  <AlertDescription>
-                      Your attendance will be locked to this device for today.
-                      <p className="mt-1 text-xs truncate text-muted-foreground">Device ID: {deviceId}</p>
-                  </AlertDescription>
-              </Alert>
+              {deviceId && (
+                 <Alert variant="default" className="border-blue-500/50 bg-blue-500/10 text-blue-700">
+                    <Smartphone className="h-4 w-4 text-blue-600" />
+                    <AlertTitle>Device Verification</AlertTitle>
+                    <AlertDescription>
+                        Your attendance will be locked to this device for today.
+                        <p className="mt-1 text-xs truncate text-muted-foreground">Device ID: {deviceId}</p>
+                    </AlertDescription>
+                </Alert>
+              )}
             </CardContent>
             <CardFooter>
-                 <Button onClick={handleProceedToVerification} disabled={!location || isSubmitting} className="w-full py-6 text-lg font-semibold transition-all hover:scale-105 active-scale-100">
+                 <Button onClick={handleProceedToVerification} disabled={!location || isSubmitting || !studentName || !floorNumber} className="w-full py-6 text-lg font-semibold transition-all hover:scale-105 active-scale-100">
                     Next: Liveness Check
                  </Button>
             </CardFooter>
