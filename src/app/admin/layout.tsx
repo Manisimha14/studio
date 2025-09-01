@@ -4,7 +4,7 @@
 import { useState, useEffect, type ReactNode } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import { Header } from '@/components/Header';
-import { AttendanceProvider, useAttendance } from '@/context/AttendanceContext';
+import { useAttendance } from '@/context/AttendanceContext';
 import AdminLoginPage from './page';
 import Loading from '../loading';
 import AdminDashboard from './dashboard/page';
@@ -32,13 +32,19 @@ function AdminContent() {
     const session = window.localStorage.getItem('adminAuthenticated');
     const authenticated = session === 'true';
     setIsAuthenticated(authenticated);
+  }, []);
+  
+  useEffect(() => {
+     if (isAuthenticated === null) return;
+     
+     const isAuth = isAuthenticated;
 
-    if (authenticated && pathname === '/admin') {
+    if (isAuth && pathname === '/admin') {
       router.replace('/admin/dashboard');
-    } else if (!authenticated && pathname === '/admin/dashboard') {
+    } else if (!isAuth && pathname === '/admin/dashboard') {
       router.replace('/admin');
     }
-  }, [pathname, router]);
+  }, [isAuthenticated, pathname, router]);
 
   const handleLoginSuccess = () => {
     window.localStorage.setItem('adminAuthenticated', 'true');
@@ -86,8 +92,6 @@ function AdminContent() {
 
 export default function AdminLayout({ children }: { children: ReactNode }) {
     return (
-        <AttendanceProvider>
-            <AdminContent />
-        </AttendanceProvider>
+        <AdminContent />
     );
 }
