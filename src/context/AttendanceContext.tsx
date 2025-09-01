@@ -18,9 +18,19 @@ export interface AttendanceRecord {
   floorNumber: string;
 }
 
+interface NewRecord {
+    studentName: string;
+    floorNumber: string;
+    location: {
+        latitude: number;
+        longitude: number;
+    };
+    photo: string | null;
+}
+
 interface AttendanceContextType {
   records: AttendanceRecord[];
-  addRecord: (record: Omit<AttendanceRecord, "id" | "timestamp">) => Promise<void>;
+  addRecord: (record: NewRecord) => Promise<void>;
   removeRecord: (id: string) => Promise<void>;
 }
 
@@ -54,7 +64,7 @@ export function AttendanceProvider({ children }: { children: ReactNode }) {
     return () => unsubscribe();
   }, []);
 
-  const addRecord = async (record: Omit<AttendanceRecord, "id" | "timestamp">) => {
+  const addRecord = async (record: NewRecord) => {
     const attendanceRef = ref(db, 'attendance');
     const newRecord = {
       ...record,
