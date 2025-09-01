@@ -18,7 +18,7 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Users, ArrowLeft, ArrowRight, Trash2, Loader2 } from "lucide-react";
+import { Users, ArrowLeft, ArrowRight, Trash2, Loader2, ListX } from "lucide-react";
 import Image from "next/image";
 import { useState } from "react";
 import { AttendanceRecord, useAttendance } from "@/context/AttendanceContext";
@@ -40,7 +40,7 @@ import { format } from 'date-fns';
 const RECORDS_PER_PAGE = 5;
 
 export default function AdminDashboard() {
-  const { records, removeRecord } = useAttendance();
+  const { records, loading, removeRecord } = useAttendance();
   const [currentPage, setCurrentPage] = useState(1);
   const { toast } = useToast();
   
@@ -121,12 +121,21 @@ export default function AdminDashboard() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {records.length === 0 ? (
+                {loading ? (
                     <TableRow>
                         <TableCell colSpan={6} className="h-32 text-center">
                             <div className="flex flex-col items-center gap-2 text-muted-foreground">
                                 <Loader2 className="h-8 w-8 animate-spin" />
                                 <span>Waiting for attendance records...</span>
+                            </div>
+                        </TableCell>
+                    </TableRow>
+                ) : records.length === 0 ? (
+                    <TableRow>
+                        <TableCell colSpan={6} className="h-32 text-center">
+                            <div className="flex flex-col items-center gap-2 text-muted-foreground">
+                                <ListX className="h-8 w-8" />
+                                <span>No attendance records found.</span>
                             </div>
                         </TableCell>
                     </TableRow>

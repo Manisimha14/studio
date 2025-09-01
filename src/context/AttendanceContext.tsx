@@ -30,6 +30,7 @@ interface NewRecord {
 
 interface AttendanceContextType {
   records: AttendanceRecord[];
+  loading: boolean;
   addRecord: (record: NewRecord) => Promise<void>;
   removeRecord: (id: string) => Promise<void>;
 }
@@ -40,6 +41,7 @@ const AttendanceContext = createContext<AttendanceContextType | undefined>(
 
 export function AttendanceProvider({ children }: { children: ReactNode }) {
   const [records, setRecords] = useState<AttendanceRecord[]>([]);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const attendanceRef = ref(db, 'attendance');
@@ -58,20 +60,21 @@ export function AttendanceProvider({ children }: { children: ReactNode }) {
       } else {
         setRecords([]);
       }
+      setLoading(false); // Set loading to false after first data load
     });
 
     // Cleanup subscription on unmount
     return () => unsubscribe();
   }, []);
 
-  const addRecord = async (record: NewRecord) => {
+  const addRecord = async ({ studentName, floorNumber, location, photo }: NewRecord) => {
     const attendanceRef = ref(db, 'attendance');
     // Explicitly create the object to be pushed
     const newRecordPayload = {
-      studentName: record.studentName,
-      floorNumber: record.floorNumber,
-      location: record.location,
-      photo: record.photo,
+      studentName,
+      floorNumber,
+      location,
+      photo,
       timestamp: serverTimestamp(),
     };
     await push(attendanceRef, newRecordPayload);
@@ -83,7 +86,7 @@ export function AttendanceProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <AttendanceContext.Provider value={{ records, addRecord, removeRecord }}>
+    <AttendanceContext.Provider value={{ records, loading, addRecord, removeRecord }}>
       {children}
     </AttendanceContext.Provider>
   );
