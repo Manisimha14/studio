@@ -43,7 +43,7 @@ import { playSound } from "@/lib/utils";
 import {
   FaceLandmarker,
   FilesetResolver,
-  FaceLandmarkerResult,
+  type FaceLandmarkerResult,
 } from "@mediapipe/tasks-vision";
 import { Badge } from "@/components/ui/badge";
 
@@ -219,7 +219,9 @@ export default function AttendancePage() {
     }
 
     return () => {
-       cancelAnimationFrame(animationFrameId.current!);
+       if (animationFrameId.current) {
+         cancelAnimationFrame(animationFrameId.current);
+       }
       if (videoRef.current && videoRef.current.srcObject) {
         const stream = videoRef.current.srcObject as MediaStream;
         stream.getTracks().forEach(track => track.stop());
@@ -244,7 +246,9 @@ export default function AttendancePage() {
         const dataUrl = canvas.toDataURL("image/jpeg", 0.8);
         setSnapshot(dataUrl);
         setFaceDetected(false); // Stop detection after capture
-        cancelAnimationFrame(animationFrameId.current!);
+        if (animationFrameId.current) {
+          cancelAnimationFrame(animationFrameId.current);
+        }
 
         const stream = video.srcObject as MediaStream;
         if(stream) {
