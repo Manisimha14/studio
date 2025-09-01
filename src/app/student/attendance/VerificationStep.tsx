@@ -20,7 +20,6 @@ import {
   VideoOff,
   AlertTriangle,
   RefreshCw,
-  Ban,
   Sparkles,
   UserCheck,
   Smile,
@@ -156,7 +155,14 @@ export default function VerificationStep({ livenessChallenge, onVerified, isSubm
         
         if (videoRef.current) {
           videoRef.current.srcObject = stream;
-          await videoRef.current.play();
+          await new Promise((resolve) => {
+            if (videoRef.current) {
+              videoRef.current.onloadedmetadata = () => {
+                videoRef.current?.play();
+                resolve(null);
+              };
+            }
+          });
         }
         
         setStatus("loading_model");
