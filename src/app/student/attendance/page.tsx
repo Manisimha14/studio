@@ -189,10 +189,11 @@ export default function AttendancePage() {
     } catch (error) {
         console.error("Error marking attendance:", error);
         playError();
+        const errorMessage = (error as Error)?.message || "Could not mark attendance. Please try again.";
         toast({
             variant: "destructive",
             title: "Submission Failed",
-            description: "Could not mark attendance. Please try again.",
+            description: errorMessage,
         });
     } finally {
         setIsSubmitting(false);
@@ -372,7 +373,7 @@ export default function AttendancePage() {
                     {snapshot ? "Snapshot Taken" : "Take Snapshot"}
                 </Button>
                 {snapshot && (
-                    <Button onClick={handleRetake} variant="outline" disabled={isFormDisabled} className="transition-all hover:scale-105 active:scale-100">
+                    <Button onClick={handleRetake} variant="outline" disabled={isFormDisabled} className="transition-all hover:scale-105 active-scale-100">
                         <RefreshCw className="mr-2" />
                         Retake
                     </Button>

@@ -1,13 +1,50 @@
 diff --git a/node_modules/@genkit-ai/core/package.json b/node_modules/@genkit-ai/core/package.json
-index 47c327261d76378873d348987d35368a5204482a..30a3b01859556828238f4d5464a66e5f3ba21598 100644
+index 5414f2b..ba4146a 100644
 --- a/node_modules/@genkit-ai/core/package.json
 +++ b/node_modules/@genkit-ai/core/package.json
 @@ -62,7 +62,6 @@
+   "optionalDependencies": {
      "@genkit-ai/firebase": "^1.16.1"
    },
-   "peerDependencies": {
+-  "peerDependencies": {
 -    "genkit": "^1.18.0"
-   },
-   "peerDependenciesMeta": {
-     "@genkit-ai/firebase": {
-
+-  },
+   "publishConfig": {
+     "access": "public",
+     "provenance": true
+diff --git a/node_modules/@genkit-ai/core/src/index.ts b/node_modules/@genkit-ai/core/src/index.ts
+index b092953..c68e1a6 100644
+--- a/node_modules/@genkit-ai/core/src/index.ts
++++ b/node_modules/@genkit-ai/core/src/index.ts
+@@ -28,7 +28,6 @@
+ import { lookupAction } from './action.js';
+ import { lookupFlow } from './flow.js';
+ import { instrument } from './instrumentation.js';
+-import { registerPlugin } from './plugins.js';
+ import { getRunner } from './runner.js';
+ import { startTracing, stopTracing } from './tracing.js';
+ import { Badger } from './utils/badger.js';
+@@ -52,7 +51,7 @@
+   generate,
+   GenerateRequest,
+   GenerateResponse,
+-  genkit,
++  Genkit as genkit,
+   Genkit,
+   GenkitError,
+   getFlow,
+diff --git a/node_modules/@genkit-ai/core/src/plugins.ts b/node_modules/@genkit-ai/core/src/plugins.ts
+index d81efde..ce1f22e 100644
+--- a/node_modules/@genkit-ai/core/src/plugins.ts
++++ b/node_modules/@genkit-ai/core/src/plugins.ts
+@@ -19,10 +19,6 @@
+ 
+ const registeredPlugins = new Map<string, GenkitPlugin>();
+ 
+-export function registerPlugin(plugin: GenkitPlugin) {
+-  registeredPlugins.set(plugin.name, plugin);
+-}
+-
+ export function listPlugins(): Record<string, GenkitPlugin> {
+   return Object.fromEntries(registeredPlugins);
+ }

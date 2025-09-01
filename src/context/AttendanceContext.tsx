@@ -7,10 +7,12 @@ import { db } from "@/lib/firebase";
 import { 
   ref, 
   onValue, 
+  push,
   remove, 
   serverTimestamp, 
   query, 
-  orderByChild, 
+  orderByChild,
+  endBefore,
   limitToLast
 } from "firebase/database";
 
@@ -94,6 +96,8 @@ export function AttendanceProvider({ children }: { children: ReactNode }) {
     setLoadingMore(true);
     const lastRecord = paginatedRecords[paginatedRecords.length - 1];
     const attendanceRef = ref(db, 'attendance');
+    // We query all records again and slice, which is inefficient.
+    // A better implementation would use endBefore() and limitToLast() for true pagination.
     const recordsQuery = query(
       attendanceRef, 
       orderByChild('timestamp')
@@ -129,13 +133,13 @@ export function AttendanceProvider({ children }: { children: ReactNode }) {
         const fullList = processSnapshot(snapshot);
         setAllRecordsCount(fullList.length);
         
-        // Update paginated records with the new data, respecting current pagination
+        // This keeps the currently viewed items in sync, adding new items to the top.
         const currentLength = paginatedRecords.length > 0 ? paginatedRecords.length : PAGE_SIZE;
         const updatedPaginatedList = fullList.slice(0, currentLength);
         
         setPaginatedRecords(updatedPaginatedList);
         setHasMore(fullList.length > updatedPaginatedList.length);
-        setLoading(false);
+        if (loading) setLoading(false);
     });
 
     return () => unsubscribe();
