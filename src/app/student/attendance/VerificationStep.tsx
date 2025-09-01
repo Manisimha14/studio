@@ -48,10 +48,13 @@ export default function VerificationStep({ onVerified, isSubmitting, onBack }: V
 
       const context = canvas.getContext("2d");
       if (context) {
-        // Flip the image horizontally for a mirror effect
+        // Flip the image horizontally for a mirror effect, which is more intuitive for selfies.
         context.translate(canvas.width, 0);
         context.scale(-1, 1);
         context.drawImage(video, 0, 0, canvas.width, canvas.height);
+        // Reset the transform so future draws are normal.
+        context.setTransform(1, 0, 0, 1, 0, 0);
+
         const dataUrl = canvas.toDataURL("image/jpeg", 0.8);
         onVerified(dataUrl);
       } else {
@@ -76,7 +79,7 @@ export default function VerificationStep({ onVerified, isSubmitting, onBack }: V
         const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' } });
         if (videoRef.current) {
             videoRef.current.srcObject = stream;
-            // The 'onloadedmetadata' event listener is the most reliable way 
+            // The 'onloadedmetadata' event is the most reliable way 
             // to play the video after the stream is ready.
             videoRef.current.onloadedmetadata = () => {
                 videoRef.current?.play().then(() => {
@@ -123,26 +126,26 @@ export default function VerificationStep({ onVerified, isSubmitting, onBack }: V
             );
         case "permission_denied":
             return (
-              <Alert variant="destructive" className={`${commonClasses} bg-destructive/90`}>
+              <Alert variant="destructive" className={`${commonClasses} bg-destructive/90 text-destructive-foreground`}>
                   <VideoOff className="h-10 w-10" />
                   <AlertTitle>Camera Access Denied</AlertTitle>
                   <AlertDescription>Please allow camera access in your browser settings to continue.</AlertDescription>
-                  <Button onClick={() => setupCamera(true)}><RefreshCw className="mr-2"/>Try Again</Button>
+                  <Button variant="secondary" onClick={() => setupCamera(true)}><RefreshCw className="mr-2"/>Try Again</Button>
               </Alert>
             );
         case "error":
             return (
-              <Alert variant="destructive" className={`${commonClasses} bg-destructive/90`}>
+              <Alert variant="destructive" className={`${commonClasses} bg-destructive/90 text-destructive-foreground`}>
                   <AlertTriangle className="h-10 w-10" />
                   <AlertTitle>An Error Occurred</AlertTitle>
                   <AlertDescription>Could not start camera. Please check device permissions and try again.</AlertDescription>
-                  <Button onClick={() => setupCamera(true)}><RefreshCw className="mr-2"/>Try Again</Button>
+                  <Button variant="secondary" onClick={() => setupCamera(true)}><RefreshCw className="mr-2"/>Try Again</Button>
               </Alert>
             );
         case "ready":
              if (isSubmitting) {
                 return (
-                    <div className={`${commonClasses} bg-background/80`}>
+                    <div className={`${commonClasses} bg-background/80 backdrop-blur-sm`}>
                         <Loader2 className="h-8 w-8 animate-spin text-primary"/>
                         <p className="text-muted-foreground">Submitting...</p>
                     </div>
@@ -175,7 +178,7 @@ export default function VerificationStep({ onVerified, isSubmitting, onBack }: V
         <Button 
             onClick={handleCapture} 
             disabled={status !== 'ready' || isSubmitting}
-            className="w-full py-6 text-lg font-semibold"
+            className="w-full py-6 text-lg font-semibold transition-all hover:scale-105 active:scale-100"
         >
             <Camera className="mr-2"/>
             Take Snapshot & Submit
