@@ -30,15 +30,7 @@ import {
   User,
   Building,
   AlertTriangle,
-  Smile,
-  Eye,
 } from "lucide-react";
-import { checkLiveness } from "@/ai/flows/liveness-check-flow";
-
-const LIVENESS_CHALLENGES = [
-    { type: "smile", text: "Smile for the camera!", icon: <Smile className="h-5 w-5" /> },
-    { type: "blink", text: "Blink for the camera!", icon: <Eye className="h-5 w-5" /> }
-];
 
 export default function AttendancePage() {
   const { addRecord } = useAttendance();
@@ -58,10 +50,6 @@ export default function AttendancePage() {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [shake, setShake] = useState(false);
-  
-  const [livenessChallenge, setLivenessChallenge] = useState<{type: string, text: string, icon: JSX.Element} | null>(null);
-  const [livenessLoading, setLivenessLoading] = useState(false);
-
 
   useEffect(() => {
     if (!navigator.geolocation) {
@@ -90,8 +78,6 @@ export default function AttendancePage() {
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
       }
-      // Set a random liveness challenge
-      setLivenessChallenge(LIVENESS_CHALLENGES[Math.floor(Math.random() * LIVENESS_CHALLENGES.length)]);
     } catch (error) {
       console.error("Error accessing camera:", error);
       setHasCameraPermission(false);
@@ -122,7 +108,7 @@ export default function AttendancePage() {
       const context = canvas.getContext("2d");
       if (context) {
         context.drawImage(video, 0, 0, video.videoWidth, video.videoHeight);
-        const dataUrl = canvas.toDataURL("image/jpeg", 0.5); 
+        const dataUrl = canvas.toDataURL("image/jpeg", 0.5);
         setSnapshot(dataUrl);
 
         const stream = video.srcObject as MediaStream;
@@ -135,7 +121,6 @@ export default function AttendancePage() {
 
   const handleRetake = () => {
     setSnapshot(null);
-    setLivenessChallenge(null);
     getCameraPermission();
   };
 
@@ -159,7 +144,7 @@ export default function AttendancePage() {
       return;
     }
 
-    if (!snapshot || !livenessChallenge) {
+    if (!snapshot) {
       toast({
         variant: "destructive",
         title: "Snapshot Required",
@@ -171,26 +156,8 @@ export default function AttendancePage() {
     }
 
     setIsSubmitting(true);
-    setLivenessLoading(true);
 
     try {
-        const livenessResult = await checkLiveness({ photoDataUri: snapshot, challenge: livenessChallenge.type });
-
-        if (!livenessResult.isLive) {
-            toast({
-                variant: "destructive",
-                title: "Liveness Check Failed",
-                description: livenessResult.reason || "Please retake the photo and follow the instructions carefully.",
-            });
-            handleRetake();
-            return;
-        }
-
-        toast({
-            title: "Liveness Check Passed!",
-            description: "Submitting your attendance record...",
-        });
-
         await addRecord({ studentName, floorNumber, location, photo: snapshot });
         setIsMarked(true);
         toast({
@@ -208,11 +175,10 @@ export default function AttendancePage() {
         });
     } finally {
         setIsSubmitting(false);
-        setLivenessLoading(false);
     }
   };
 
-  const isFormDisabled = isMarked || isSubmitting || livenessLoading;
+  const isFormDisabled = isMarked || isSubmitting;
 
   return (
     <div className="flex items-start justify-center py-8">
@@ -253,7 +219,7 @@ export default function AttendancePage() {
 
           <div className="space-y-4">
              <Label className="flex items-center gap-2 font-semibold">
-                <Camera className="text-primary" /> Liveness Check
+                <Camera className="text-primary" /> Photo Verification
               </Label>
             <div className="relative aspect-video w-full overflow-hidden rounded-lg border-2 border-dashed bg-muted">
               <video
@@ -274,7 +240,7 @@ export default function AttendancePage() {
               )}
               {hasCameraPermission === null && !snapshot && (
                  <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 p-4 text-center">
-                    <p className="text-muted-foreground">The app needs camera access for a quick liveness check to prevent fraud.</p>
+                    <p className="text-muted-foreground">The app needs camera access for a photo verification.</p>
                     <Button onClick={getCameraPermission}><Camera className="mr-2"/>Enable Camera</Button>
                  </div>
               )}
@@ -286,23 +252,8 @@ export default function AttendancePage() {
                   className="absolute inset-0 h-full w-full object-cover"
                 />
               )}
-
-               {livenessLoading && (
-                 <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-black/50 text-white">
-                    <Loader2 className="h-8 w-8 animate-spin" />
-                    <span>Verifying liveness...</span>
-                 </div>
-              )}
             </div>
             
-            {livenessChallenge && !snapshot && (
-                <Alert>
-                    {livenessChallenge.icon}
-                    <AlertTitle>Liveness Challenge</AlertTitle>
-                    <AlertDescription>{livenessChallenge.text}</AlertDescription>
-                </Alert>
-            )}
-
             <div className={`flex gap-2 ${shake ? 'animate-shake' : ''}`}>
               <Button
                 onClick={handleCapture}
@@ -354,14 +305,12 @@ export default function AttendancePage() {
             disabled={isFormDisabled || !location || !snapshot}
             className="w-full py-6 text-lg font-bold"
           >
-            {isSubmitting || livenessLoading ? (
+            {isSubmitting ? (
               <Loader2 className="mr-2 h-5 w-5 animate-spin" />
             ) : isMarked ? (
               <CheckCircle className="mr-2 h-5 w-5" />
             ) : null}
-            {livenessLoading 
-              ? "Verifying..."
-              : isSubmitting
+            {isSubmitting
               ? "Marking..."
               : isMarked
               ? "Attendance Marked"
