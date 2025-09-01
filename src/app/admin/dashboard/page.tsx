@@ -18,9 +18,9 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Users, ArrowLeft, ArrowRight, Trash2, Loader2, ListX } from "lucide-react";
+import { Users, Trash2, Loader2, ListX, ArrowDown } from "lucide-react";
 import Image from "next/image";
-import { useState, useMemo, useEffect } from "react";
+import { useState, useEffect } from "react";
 import { useAttendance } from "@/context/AttendanceContext";
 import {
   AlertDialog,
@@ -38,11 +38,16 @@ import { format } from 'date-fns';
 import useSound from "use-sound";
 
 
-const RECORDS_PER_PAGE = 5;
-
 export default function AdminDashboard() {
-  const { records, loading, removeRecord } = useAttendance();
-  const [currentPage, setCurrentPage] = useState(1);
+  const { 
+    paginatedRecords, 
+    allRecordsCount, 
+    loading, 
+    removeRecord,
+    fetchMoreRecords,
+    loadingMore,
+    hasMore,
+  } = useAttendance();
   const { toast } = useToast();
   
   const [recordToDelete, setRecordToDelete] = useState<string | null>(null);
@@ -52,32 +57,6 @@ export default function AdminDashboard() {
   const [playDelete] = useSound('/sounds/delete.mp3', { volume: 0.4 });
   const [playSuccess] = useSound('/sounds/success.mp3', { volume: 0.5 });
   const [playError] = useSound('/sounds/error.mp3', { volume: 0.5 });
-
-  // Reset to page 1 if records change
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [records.length]);
-
-  const totalPages = Math.ceil(records.length / RECORDS_PER_PAGE);
-
-  const currentRecords = useMemo(() => {
-    const startIndex = (currentPage - 1) * RECORDS_PER_PAGE;
-    return records.slice(startIndex, startIndex + RECORDS_PER_PAGE);
-  }, [records, currentPage]);
-
-  const handleNextPage = () => {
-    playClick();
-    if (currentPage < totalPages) {
-      setCurrentPage(currentPage + 1);
-    }
-  };
-
-  const handlePrevPage = () => {
-    playClick();
-    if (currentPage > 1) {
-      setCurrentPage(currentPage - 1);
-    }
-  };
   
   const handleDelete = async () => {
     playDelete();
@@ -90,9 +69,6 @@ export default function AdminDashboard() {
           title: "Record Deleted",
           description: "The attendance record has been successfully deleted.",
         });
-        if (currentRecords.length === 1 && currentPage > 1) {
-            setCurrentPage(currentPage - 1);
-        }
       } catch (error) {
         playError();
         toast({
@@ -114,13 +90,13 @@ export default function AdminDashboard() {
         <div>
           <CardTitle>Live Attendance Records</CardTitle>
           <CardDescription>
-            Showing all attendance records marked by students.
+            Showing {paginatedRecords.length} of {allRecordsCount} total records.
           </CardDescription>
         </div>
         <div className="flex items-center gap-2">
           <Users className="h-5 w-5" />
           <Badge variant="secondary" className="text-lg">
-            {records.length}
+            {allRecordsCount}
           </Badge>
         </div>
       </CardHeader>
@@ -143,11 +119,11 @@ export default function AdminDashboard() {
                         <TableCell colSpan={6} className="h-48 text-center">
                             <div className="flex flex-col items-center gap-2 text-muted-foreground">
                                 <Loader2 className="h-8 w-8 animate-spin" />
-                                <span>Waiting for attendance records...</span>
+                                <span>Loading initial records...</span>
                             </div>
                         </TableCell>
                     </TableRow>
-                ) : records.length === 0 ? (
+                ) : paginatedRecords.length === 0 ? (
                     <TableRow>
                         <TableCell colSpan={6} className="h-48 text-center">
                             <div className="flex flex-col items-center gap-2 text-muted-foreground">
@@ -156,8 +132,8 @@ export default function AdminDashboard() {
                             </div>
                         </TableCell>
                     </TableRow>
-                ) : currentRecords.length > 0 ? (
-                  currentRecords.map((record) => (
+                ) : (
+                  paginatedRecords.map((record) => (
                     <TableRow key={record.id} className="transition-colors hover:bg-muted/50">
                       <TableCell>
                         {record.photo ? (
@@ -202,7 +178,7 @@ export default function AdminDashboard() {
                               <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
                               <AlertDialogDescription>
                                 This action cannot be undone. This will permanently delete the attendance record.
-                              </AlertDialogDescription>
+                              </Description>
                             </AlertDialogHeader>
                             <AlertDialogFooter>
                               <AlertDialogCancel onClick={() => setRecordToDelete(null)}>Cancel</AlertDialogCancel>
@@ -216,41 +192,31 @@ export default function AdminDashboard() {
                       </TableCell>
                     </TableRow>
                   ))
-                ) : (
-                  <TableRow>
-                    <TableCell colSpan={6} className="h-24 text-center">
-                       No records on this page.
-                    </TableCell>
-                  </TableRow>
                 )}
               </TableBody>
             </Table>
         </div>
-         <div className="mt-6 flex items-center justify-between">
-          <div className="text-sm text-muted-foreground">
-            Page {currentPage} of {totalPages || 1}
-          </div>
-          <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handlePrevPage}
-              disabled={currentPage === 1}
-            >
-              <ArrowLeft className="mr-2 h-4 w-4" />
-              Previous
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleNextPage}
-              disabled={currentPage >= totalPages}
-            >
-              Next
-              <ArrowRight className="ml-2 h-4 w-4" />
-            </Button>
-          </div>
-        </div>
+         <div className="mt-6 flex items-center justify-center">
+            {hasMore && (
+                <Button
+                    variant="outline"
+                    onClick={() => { playClick(); fetchMoreRecords();}}
+                    disabled={loadingMore}
+                >
+                    {loadingMore ? (
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    ) : (
+                        <ArrowDown className="mr-2 h-4 w-4" />
+                    )}
+                    Load More
+                </Button>
+            )}
+            {!hasMore && paginatedRecords.length > 0 && (
+                <div className="text-sm text-muted-foreground">
+                    You've reached the end of the list.
+                </div>
+            )}
+         </div>
       </CardContent>
     </Card>
   );
