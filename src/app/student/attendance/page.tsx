@@ -527,7 +527,7 @@ export default function AttendancePage() {
             </Alert>
             </CardContent>
             <CardFooter>
-                 <Button onClick={handleProceedToLiveness} disabled={!location || isFormDisabled} className="w-full py-6 text-lg font-semibold transition-all hover:scale-105 active:scale-100">
+                 <Button onClick={handleProceedToLiveness} disabled={!location || isFormDisabled} className="w-full py-6 text-lg font-semibold transition-all hover:scale-105 active-scale-100">
                     Next: Liveness Check
                  </Button>
             </CardFooter>
@@ -547,7 +547,7 @@ export default function AttendancePage() {
                 </Alert>
             </CardContent>
             <CardFooter className="flex-col gap-4">
-                 <Button onClick={handleProceedToSnapshot} disabled={!hasCameraPermission || !faceDetected} className="w-full py-6 text-lg font-semibold transition-all hover:scale-105 active:scale-100">
+                 <Button onClick={handleProceedToSnapshot} disabled={!hasCameraPermission || !faceDetected} className="w-full py-6 text-lg font-semibold transition-all hover:scale-105 active-scale-100">
                     I'm Ready, Go to Snapshot
                  </Button>
                  <Button variant="link" onClick={() => { playSound('click'); setStep(1); }} disabled={isFormDisabled}>
@@ -610,3 +610,5 @@ export default function AttendancePage() {
     </div>
   );
 }
+
+    
