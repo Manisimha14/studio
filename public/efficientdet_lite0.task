@@ -1,0 +1,255 @@
+version_code: 1
+model_type: TENSORFLOW_LITE
+model_name: "tf_lite_model"
+description: "efficientdet-lite0"
+tflite_model_options {
+  disable_per_channel_quantization: true
+}
+subgraph {
+  name: "od_single_head"
+  input_tensor: "normalized_input_image_tensor"
+  output_tensor: "TFLite_Detection_PostProcess"
+  output_tensor: "TFLite_Detection_PostProcess:1"
+  output_tensor: "TFLite_Detection_PostProcess:2"
+  output_tensor: "TFLite_Detection_PostProcess:3"
+  options {
+    [mediapipe.tasks.TensorsToDetectionsCalculatorOptions.ext] {
+      num_classes: 91
+      num_boxes: 2034
+      num_coords: 4
+      box_coord_offset: 0
+      keypoint_coord_offset: 0
+      keypoint_label_map_path: ""
+      keypoint_score_threshold: 0.0
+      score_threshold: 0.0
+      min_score_threshold: 0.0
+      ignore_classes: [0, 10, 12, 26, 29, 30, 45, 66, 68, 69, 71, 83]
+      allow_classes: []
+      max_results: -1
+      flip_vertically: false
+      apply_exponential_on_box_size: false
+      reverse_output_order: true
+      sigmoid_score: true
+      x_scale: 128.0
+      y_scale: 128.0
+      h_scale: 128.0
+      w_scale: 128.0
+      min_suppression_threshold: 0.0
+      nms_iou_threshold: 0.0
+    }
+  }
+}
+subgraph {
+  name: "TFLite_Detection_PostProcess"
+  input_tensor: "box_outputs"
+  input_tensor: "class_outputs"
+  output_tensor: "detection_scores"
+  output_tensor: "detection_locations"
+  output_tensor: "detection_classes"
+  output_tensor: "num_detections"
+  options {
+    [mediapipe.TfliteDetectionPostProcessCalculatorOptions.ext] {
+      max_detections: 100
+      max_classes_per_detection: 1
+      use_regular_nms: true
+      nms_score_threshold: 0.0
+      nms_iou_threshold: 0.45
+      num_classes: 91
+      y_scale: 10.0
+      x_scale: 10.0
+      h_scale: 5.0
+      w_scale: 5.0
+      unconstrained: false
+      unconstrained: false
+      unconstrained: false
+      unconstrained: false
+      unconstrained: false
+      unconstrained: false
+      unconstrained: false
+      unconstrained: false
+      unconstrained: false
+      unconstrained: false
+      unconstrained: false
+      unconstrained: false
+      unconstrained: false
+      unconstrained: false
+      unconstrained: false
+      unconstrained: false
+      unconstrained: false
+      unconstrained: false
+      unconstrained: false
+      unconstrained: false
+      unconstrained: false
+      unconstrained: false
+      unconstrained: false
+      unconstrained: false
+      unconstrained: false
+      unconstrained: false
+      unconstrained: false
+      unconstrained: false
+      unconstrained: false
+      unconstrained: false
+      unconstrained: false
+      unconstrained: false
+      unconstrained: false
+      unconstrained: false
+      unconstrained: false
+      unconstrained: false
+      unconstrained: false
+      unconstrained: false
+      unconstrained: false
+      unconstrained: false
+      unconstrained: false
+      unconstrained: false
+      unconstrained: false
+      unconstrained: false
+      unconstrained: false
+      unconstrained: false
+      unconstrained: false
+      unconstrained: false
+      unconstrained: false
+      unconstrained: false
+      unconstrained: false
+      unconstrained: false
+      unconstrained: false
+      unconstrained: false
+      unconstrained: false
+      unconstrained: false
+      unconstrained: false
+      unconstrained: false
+      unconstrained: false
+      unconstrained: false
+      unconstrained: false
+      unconstrained: false
+      unconstrained: false
+      unconstrained: false
+      unconstrained: false
+      unconstrained: false
+      unconstrained: false
+      unconstrained: false
+      unconstrained: false
+      unconstrained: false
+      unconstrained: false
+      unconstrained: false
+      unconstrained: false
+      unconstrained: false
+      unconstrained: false
+      unconstrained: false
+      unconstrained: false
+      unconstrained: false
+      unconstrained: false
+      unconstrained: false
+      unconstrained: false
+      unconstrained: false
+      unconstrained: false
+      unconstrained: false
+      unconstrained: false
+      unconstrained: false
+      unconstrained: false
+      unconstrained: false
+      unconstrained: false
+      unconstrained: false
+      unconstrained: false
+    }
+  }
+}
+input_stream: "IMAGE:image"
+output_stream: "DETECTIONS:detections"
+node {
+  calculator: "ImageToTensorCalculator"
+  input_stream: "IMAGE:image"
+  output_stream: "TENSORS:image_tensor"
+  node_options {
+    [mediapipe.ImageToTensorCalculatorOptions.ext] {
+      output_tensor_width: 320
+      output_tensor_height: 320
+      keep_aspect_ratio: true
+      output_tensor_float_range {
+        min: -1.0
+        max: 1.0
+      }
+      border_mode: BORDER_ZERO
+      gpu_origin: TOP_LEFT
+    }
+  }
+}
+node {
+  calculator: "TfLiteInferenceCalculator"
+  input_stream: "TENSORS:image_tensor"
+  output_stream: "TENSORS:tflite_tensors"
+  node_options {
+    [mediapipe.TfLiteInferenceCalculatorOptions.ext] {
+      model_path: "efficientdet_lite0.tflite"
+      gpu_origin: TOP_LEFT
+    }
+  }
+}
+node {
+  calculator: "TfLiteTensorsToDetectionCalculator"
+  input_stream: "TENSORS:tflite_tensors"
+  output_stream: "DETECTIONS:detections"
+  node_options {
+    [mediapipe.TfLiteTensorsToDetectionCalculatorOptions.ext] {
+      num_classes: 91
+      num_boxes: 2034
+      num_coords: 4
+      box_coord_offset: 0
+      keypoint_coord_offset: 0
+      keypoint_label_map_path: ""
+      keypoint_score_threshold: 0.0
+      score_threshold: 0.0
+      min_score_threshold: 0.0
+      ignore_classes: [0, 10, 12, 26, 29, 30, 45, 66, 68, 69, 71, 83]
+      allow_classes: []
+      max_results: -1
+      flip_vertically: false
+      apply_exponential_on_box_size: false
+      reverse_output_order: true
+      sigmoid_score: true
+      x_scale: 128.0
+      y_scale: 128.0
+      h_scale: 128.0
+      w_scale: 128.0
+      min_suppression_threshold: 0.0
+      nms_iou_threshold: 0.0
+    }
+  }
+}
+node {
+  calculator: "TensorsToDetectionsCalculator"
+  input_stream: "TENSORS:0:box_outputs"
+  input_stream: "TENSORS:1:class_outputs"
+  output_stream: "DETECTIONS:detections"
+  node_options {
+    [mediapipe.tasks.TensorsToDetectionsCalculatorOptions.ext] {
+      num_classes: 91
+      num_boxes: 2034
+      num_coords: 4
+      box_coord_offset: 0
+      keypoint_coord_offset: 0
+      keypoint_label_map_path: ""
+      keypoint_score_threshold: 0.0
+      score_threshold: 0.0
+      min_score_threshold: 0.0
+      ignore_classes: [0, 10, 12, 26, 29, 30, 45, 66, 68, 69, 71, 83]
+      allow_classes: []
+      max_results: -1
+      flip_vertically: false
+      apply_exponential_on_box_size: false
+      reverse_output_order: true
+      sigmoid_score: true
+      x_scale: 128.0
+      y_scale: 128.0
+      h_scale: 128.0
+      w_scale: 128.0
+      min_suppression_threshold: 0.0
+      nms_iou_threshold: 0.0
+    }
+  }
+}
+graph_options {
+  [mediapipe.tasks.core.proto.TaskOptions.ext] {
+    task_name: "ObjectDetector"
+    display_names_local: "en"
+  }
+}
