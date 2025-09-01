@@ -150,17 +150,19 @@ export default function AttendancePage() {
   useEffect(() => {
     const isCameraStep = step === 2 || (step === 3 && !snapshot);
     
-    if (isCameraStep && hasCameraPermission === null) {
+    if (isCameraStep) {
+        // Request camera permission as soon as we enter a camera step
         getCameraPermission();
     }
 
     return () => {
+      // Cleanup: stop camera stream when component unmounts or step changes
       if (videoRef.current && videoRef.current.srcObject) {
         const stream = videoRef.current.srcObject as MediaStream;
         stream.getTracks().forEach(track => track.stop());
       }
     };
-  }, [step, snapshot, getCameraPermission, hasCameraPermission]);
+  }, [step, snapshot, getCameraPermission]);
 
 
   const handleCapture = useCallback(() => {
@@ -307,7 +309,7 @@ export default function AttendancePage() {
     <div className="relative aspect-video w-full overflow-hidden rounded-lg border-2 border-dashed bg-muted">
         <video
             ref={videoRef}
-            className={`h-full w-full object-cover transition-opacity duration-300 ${snapshot ? 'opacity-0' : 'opacity-100'}`}
+            className={`h-full w-full object-cover transition-opacity duration-300 ${hasCameraPermission && !snapshot ? 'opacity-100' : 'opacity-0'}`}
             autoPlay
             muted
             playsInline
