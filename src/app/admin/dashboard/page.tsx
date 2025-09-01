@@ -20,7 +20,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Users, Trash2, Loader2, ListX, ArrowDown } from "lucide-react";
 import Image from "next/image";
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useAttendance } from "@/context/AttendanceContext";
 import {
   AlertDialog,
