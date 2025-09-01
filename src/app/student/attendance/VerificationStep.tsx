@@ -79,16 +79,10 @@ export default function VerificationStep({ onVerified, isSubmitting, onBack }: V
         const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' } });
         if (videoRef.current) {
             videoRef.current.srcObject = stream;
-            // The 'onloadedmetadata' event is the most reliable way 
-            // to play the video after the stream is ready.
-            videoRef.current.onloadedmetadata = () => {
-                videoRef.current?.play().then(() => {
-                    setStatus("ready");
-                }).catch(e => {
-                    console.error("Video play failed:", e);
-                    setStatus("error");
-                    playSound('error');
-                });
+            // The `oncanplay` event is a more reliable indicator that the video is ready to be shown.
+            // It fires when the browser can start playing the video.
+            videoRef.current.oncanplay = () => {
+                setStatus("ready");
             };
         }
       } catch (error) {
@@ -144,13 +138,13 @@ export default function VerificationStep({ onVerified, isSubmitting, onBack }: V
             );
         case "ready":
              if (isSubmitting) {
-                return (
-                    <div className={`${commonClasses} bg-background/80 backdrop-blur-sm`}>
-                        <Loader2 className="h-8 w-8 animate-spin text-primary"/>
-                        <p className="text-muted-foreground">Submitting...</p>
-                    </div>
-                );
-            }
+                 return (
+                     <div className={`${commonClasses} bg-background/80 backdrop-blur-sm`}>
+                         <Loader2 className="h-8 w-8 animate-spin text-primary"/>
+                         <p className="text-muted-foreground">Submitting...</p>
+                     </div>
+                 );
+             }
             return null;
         default:
             return null;
