@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import {
@@ -34,6 +34,7 @@ import {
   ArrowLeft,
   Ban,
   Smartphone,
+  Sparkles,
 } from "lucide-react";
 import { useGeolocator } from "@/hooks/use-geolocator";
 import { playSound } from "@/lib/utils";
@@ -52,13 +53,21 @@ const getDeviceId = () => {
   return deviceId;
 };
 
+const LIVENESS_CHALLENGES = [
+    "Smile for the camera",
+    "Slowly blink three times",
+    "Turn your head to the left",
+    "Turn your head to the right",
+    "Hold up your right hand"
+];
+
 export default function AttendancePage() {
   const { addRecord } = useAttendance();
   const { toast } = useToast();
   const router = useRouter();
   const { location, error, status } = useGeolocator({ enableHighAccuracy: true });
   
-  const [step, setStep] = useState(1); // 1: Form, 2: Snapshot, 3: Success
+  const [step, setStep] = useState(1); // 1: Form, 2: Liveness, 3: Snapshot, 4: Success
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [hasCameraPermission, setHasCameraPermission] = useState<boolean | null>(null);
   const [snapshot, setSnapshot] = useState<string | null>(null);
@@ -68,12 +77,17 @@ export default function AttendancePage() {
   const [virtualCameraDetected, setVirtualCameraDetected] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  
+  const livenessChallenge = useMemo(() => LIVENESS_CHALLENGES[Math.floor(Math.random() * LIVENESS_CHALLENGES.length)], []);
 
   useEffect(() => {
     setDeviceId(getDeviceId());
   }, []);
 
-  const getCameraPermission = useCallback(async () => {
+  const getCameraPermission = useCallback(async (isRetry = false) => {
+    if (isRetry) {
+        playSound('click');
+    }
     setVirtualCameraDetected(false);
     try {
        const devices = await navigator.mediaDevices.enumerateDevices();
@@ -134,16 +148,20 @@ export default function AttendancePage() {
   }, [toast]);
 
   useEffect(() => {
-    if (step === 2 && !snapshot) {
-      getCameraPermission();
+    const isCameraStep = step === 2 || (step === 3 && !snapshot);
+    if (isCameraStep) {
+        if (hasCameraPermission === null || (hasCameraPermission === false && !virtualCameraDetected)) {
+            getCameraPermission();
+        }
     }
+
     return () => {
       if (videoRef.current && videoRef.current.srcObject) {
         const stream = videoRef.current.srcObject as MediaStream;
         stream.getTracks().forEach(track => track.stop());
       }
     };
-  }, [step, snapshot, getCameraPermission]);
+  }, [step, snapshot, getCameraPermission, hasCameraPermission, virtualCameraDetected]);
 
 
   const handleCapture = useCallback(() => {
@@ -175,7 +193,7 @@ export default function AttendancePage() {
     setSnapshot(null);
   }, []);
 
-  const handleNextStep = useCallback(() => {
+  const handleProceedToLiveness = useCallback(() => {
      playSound('click');
      if (!studentName || !floorNumber) {
       playSound('error');
@@ -199,6 +217,11 @@ export default function AttendancePage() {
   }, [studentName, floorNumber, location, toast]);
 
 
+  const handleProceedToSnapshot = useCallback(() => {
+    playSound('click');
+    setStep(3);
+  }, []);
+
   const handleMarkAttendance = useCallback(async () => {
     playSound('click');
     if (!snapshot) {
@@ -220,7 +243,7 @@ export default function AttendancePage() {
           deviceId: deviceId,
         });
         playSound('success');
-        setStep(3);
+        setStep(4);
         toast({
           title: "Success!",
           description: "Thank you for marking the attendance.",
@@ -279,7 +302,52 @@ export default function AttendancePage() {
     }
   }, [status, error, location]);
   
-  if (step === 3) {
+  const renderCameraView = useCallback(() => (
+    <div className="relative aspect-video w-full overflow-hidden rounded-lg border-2 border-dashed bg-muted">
+        <video
+            ref={videoRef}
+            className={`h-full w-full object-cover transition-opacity duration-300 ${snapshot ? 'opacity-0' : 'opacity-100'}`}
+            autoPlay
+            muted
+            playsInline
+        />
+        <canvas ref={canvasRef} className="hidden" />
+        
+        {virtualCameraDetected && (
+           <Alert variant="destructive" className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-center p-4">
+                <Ban className="h-10 w-10" />
+                <AlertTitle>Physical Webcam Required</AlertTitle>
+                <AlertDescription>The use of virtual camera software is not permitted. Please use a physical webcam.</AlertDescription>
+            </Alert>
+        )}
+
+        {hasCameraPermission === false && !virtualCameraDetected && (
+            <Alert variant="destructive" className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-center p-4">
+                <VideoOff className="h-10 w-10" />
+                <AlertTitle>Camera Access Denied</AlertTitle>
+                <AlertDescription>Please allow camera access in your browser settings and ensure a physical webcam is connected.</AlertDescription>
+            </Alert>
+        )}
+        
+         {hasCameraPermission === null && !snapshot && (
+            <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 p-4 text-center">
+                <p className="text-muted-foreground">The app needs camera access to take a snapshot.</p>
+                <Button onClick={() => getCameraPermission(true)}><Camera className="mr-2"/>Enable Camera</Button>
+            </div>
+        )}
+
+        {snapshot && (
+            <img
+            src={snapshot}
+            alt="Snapshot"
+            className="absolute inset-0 h-full w-full object-cover"
+            />
+        )}
+    </div>
+  ), [snapshot, virtualCameraDetected, hasCameraPermission, getCameraPermission]);
+
+
+  if (step === 4) {
       return (
            <div className="flex items-start justify-center py-8 fade-in">
               <Card className="w-full max-w-lg text-center shadow-lg">
@@ -299,16 +367,34 @@ export default function AttendancePage() {
       )
   }
 
+  const getStepTitle = () => {
+    switch(step) {
+      case 1: return "Mark Your Attendance";
+      case 2: return "Liveness Challenge";
+      case 3: return "Identity Verification";
+      default: return "";
+    }
+  }
+
+  const getStepDescription = () => {
+      switch(step) {
+        case 1: return "Complete the steps below to record your attendance.";
+        case 2: return "To ensure you are present, please perform the following action.";
+        case 3: return "A snapshot is required for verification. Make sure you are doing the action from the previous step.";
+        default: return "";
+      }
+  }
+
 
   return (
     <div className="flex items-start justify-center py-8 fade-in">
       <Card className="w-full max-w-lg shadow-xl transition-all">
         <CardHeader>
           <CardTitle className="text-3xl font-bold">
-            {step === 1 ? "Mark Your Attendance" : "Identity Verification"}
+            {getStepTitle()}
           </CardTitle>
           <CardDescription>
-            {step === 1 ? "Complete the steps below to record your attendance." : "A snapshot is required for verification."}
+            {getStepDescription()}
           </CardDescription>
         </CardHeader>
 
@@ -360,8 +446,8 @@ export default function AttendancePage() {
             </Alert>
             </CardContent>
             <CardFooter>
-                 <Button onClick={handleNextStep} disabled={!location || isFormDisabled} className="w-full py-6 text-lg font-semibold transition-all hover:scale-105 active:scale-100">
-                    Next: Take Snapshot
+                 <Button onClick={handleProceedToLiveness} disabled={!location || isFormDisabled} className="w-full py-6 text-lg font-semibold transition-all hover:scale-105 active:scale-100">
+                    Next: Liveness Check
                  </Button>
             </CardFooter>
             </>
@@ -370,48 +456,38 @@ export default function AttendancePage() {
         {step === 2 && (
             <>
             <CardContent className="space-y-4">
-                <div className="relative aspect-video w-full overflow-hidden rounded-lg border-2 border-dashed bg-muted">
-                <video
-                    ref={videoRef}
-                    className={`h-full w-full object-cover transition-opacity duration-300 ${snapshot ? 'opacity-0' : 'opacity-100'}`}
-                    autoPlay
-                    muted
-                    playsInline
-                />
-                <canvas ref={canvasRef} className="hidden" />
-                 
-                {virtualCameraDetected && (
-                   <Alert variant="destructive" className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-center p-4">
-                        <Ban className="h-10 w-10" />
-                        <AlertTitle>Physical Webcam Required</AlertTitle>
-                        <AlertDescription>The use of virtual camera software is not permitted. Please use a physical webcam.</AlertDescription>
-                    </Alert>
-                )}
+               {renderCameraView()}
+                <Alert>
+                    <Sparkles className="h-4 w-4" />
+                    <AlertTitle>Your Challenge:</AlertTitle>
+                    <AlertDescription className="text-lg font-semibold text-primary">
+                        {livenessChallenge}
+                    </AlertDescription>
+                </Alert>
+            </CardContent>
+            <CardFooter className="flex-col gap-4">
+                 <Button onClick={handleProceedToSnapshot} disabled={!hasCameraPermission} className="w-full py-6 text-lg font-semibold transition-all hover:scale-105 active:scale-100">
+                    I'm Ready, Go to Snapshot
+                 </Button>
+                 <Button variant="link" onClick={() => { playSound('click'); setStep(1); }} disabled={isFormDisabled}>
+                     <ArrowLeft className="mr-2" />
+                     Go Back
+                 </Button>
+            </CardFooter>
+            </>
+        )}
 
-                {hasCameraPermission === false && !virtualCameraDetected && (
-                    <Alert variant="destructive" className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-center p-4">
-                        <VideoOff className="h-10 w-10" />
-                        <AlertTitle>Camera Access Denied</AlertTitle>
-                        <AlertDescription>Please allow camera access in your browser settings and ensure a physical webcam is connected.</AlertDescription>
-                    </Alert>
-                )}
-                
-                 {hasCameraPermission === null && !snapshot && (
-                    <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 p-4 text-center">
-                        <p className="text-muted-foreground">The app needs camera access to take a snapshot.</p>
-                        <Button onClick={() => { playSound('click'); getCameraPermission(); }}><Camera className="mr-2"/>Enable Camera</Button>
-                    </div>
-                )}
-
-                {snapshot && (
-                    <img
-                    src={snapshot}
-                    alt="Snapshot"
-                    className="absolute inset-0 h-full w-full object-cover"
-                    />
-                )}
-                </div>
-                
+        {step === 3 && (
+            <>
+            <CardContent className="space-y-4">
+                {renderCameraView()}
+                <Alert variant="default" className="border-blue-500/50 bg-blue-500/10 text-blue-700">
+                    <AlertTriangle className="h-4 w-4 text-blue-600" />
+                    <AlertTitle>Reminder: {livenessChallenge}</AlertTitle>
+                    <AlertDescription>
+                        Please perform this action while taking the snapshot.
+                    </AlertDescription>
+                </Alert>
                 <div className="flex gap-2">
                 <Button
                     onClick={handleCapture}
@@ -442,9 +518,9 @@ export default function AttendancePage() {
                     )}
                     {isSubmitting ? "Submitting..." : "Submit Attendance"}
                 </Button>
-                 <Button variant="link" onClick={() => { playSound('click'); setStep(1); }} disabled={isFormDisabled}>
+                 <Button variant="link" onClick={() => { playSound('click'); setStep(2); setSnapshot(null); }} disabled={isFormDisabled}>
                      <ArrowLeft className="mr-2" />
-                     Go Back
+                     Back to Challenge
                  </Button>
             </CardFooter>
             </>
