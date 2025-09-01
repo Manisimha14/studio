@@ -20,7 +20,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Users, ArrowLeft, ArrowRight, Trash2, Loader2, ListX } from "lucide-react";
 import Image from "next/image";
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useAttendance } from "@/context/AttendanceContext";
 import {
   AlertDialog,
@@ -46,6 +46,11 @@ export default function AdminDashboard() {
   
   const [recordToDelete, setRecordToDelete] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+
+  // Reset to page 1 if records change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [records.length]);
 
   const totalPages = Math.ceil(records.length / RECORDS_PER_PAGE);
 
@@ -75,6 +80,7 @@ export default function AdminDashboard() {
           title: "Record Deleted",
           description: "The attendance record has been successfully deleted.",
         });
+        // If it was the last record on the page, and not page 1, go back.
         if (currentRecords.length === 1 && currentPage > 1) {
             setCurrentPage(currentPage - 1);
         }
@@ -203,7 +209,7 @@ export default function AdminDashboard() {
                 ) : (
                   <TableRow>
                     <TableCell colSpan={6} className="h-24 text-center">
-                      No attendance records on this page.
+                       No records on this page.
                     </TableCell>
                   </TableRow>
                 )}

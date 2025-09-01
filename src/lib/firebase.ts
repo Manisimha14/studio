@@ -3,13 +3,11 @@ import { initializeApp, getApps, getApp } from "firebase/app";
 import { getDatabase } from "firebase/database";
 
 const firebaseConfig = {
-  projectId: "geoattendance-mvp",
-  appId: "1:735578389641:web:9422aa71efbf9e709ada58",
-  apiKey: "AIzaSyCtBjG85YxZTqyaJ4oKTZF2MUPrdgASadA",
-  authDomain: "geoattendance-mvp.firebaseapp.com",
-  measurementId: "",
-  messagingSenderId: "735578389641",
-  databaseURL: "https://geoattendance-mvp-default-rtdb.firebaseio.com"
+  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
+  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
+  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
+  databaseURL: process.env.NEXT_PUBLIC_FIREBASE_DATABASE_URL,
+  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
 };
 
 // Initialize Firebase

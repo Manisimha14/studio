@@ -4,23 +4,10 @@
 import { useState, useEffect, type ReactNode } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import { Header } from '@/components/Header';
-import AdminLoginPage from './page';
 import Loading from '../loading';
-import AdminDashboard from './dashboard/page';
+import AdminLoginPage from './page';
 
-function AdminDashboardLayout({ children, onLogout }: { children: ReactNode; onLogout: () => void }) {
-  return (
-    <div className="flex min-h-screen w-full flex-col">
-      <Header title="Admin Portal" onLogout={onLogout} />
-      <main className="flex flex-1 flex-col items-center justify-center p-4">
-        <AdminDashboard />
-      </main>
-    </div>
-  );
-}
-
-
-function AdminContent() {
+function AdminLayoutContent({ children }: { children: ReactNode }) {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
   const pathname = usePathname();
   const router = useRouter();
@@ -34,13 +21,11 @@ function AdminContent() {
   useEffect(() => {
      if (isAuthenticated === null) return;
      
-     const isAuth = isAuthenticated;
-
-    if (isAuth && pathname === '/admin') {
-      router.replace('/admin/dashboard');
-    } else if (!isAuth && pathname.startsWith('/admin/dashboard')) {
-      router.replace('/admin');
-    }
+     if (isAuthenticated && pathname === '/admin') {
+       router.replace('/admin/dashboard');
+     } else if (!isAuthenticated && pathname.startsWith('/admin/dashboard')) {
+       router.replace('/admin');
+     }
   }, [isAuthenticated, pathname, router]);
 
   const handleLoginSuccess = () => {
@@ -55,40 +40,45 @@ function AdminContent() {
     router.replace('/');
   };
 
-
   if (isAuthenticated === null) {
     return <Loading />;
   }
-  
+
+  // If on a dashboard route but not authenticated, show loading while redirecting
   if (!isAuthenticated && pathname.startsWith('/admin/dashboard')) {
      return <Loading />;
   }
   
+  // If on the login page but already authenticated, show loading while redirecting
   if (isAuthenticated && pathname === '/admin') {
       return <Loading />;
   }
 
-  if (!isAuthenticated) {
+  if (pathname.startsWith('/admin/dashboard')) {
     return (
       <div className="flex min-h-screen w-full flex-col">
-        <Header title="Admin Portal" />
+        <Header title="Admin Portal" onLogout={handleLogout} />
         <main className="flex flex-1 flex-col items-center justify-center p-4">
-          <AdminLoginPage onLoginSuccess={handleLoginSuccess} />
+          {children}
         </main>
       </div>
     );
   }
 
+  // Render login page for /admin or if not authenticated
   return (
-    <AdminDashboardLayout onLogout={handleLogout}>
-       <AdminDashboard />
-    </AdminDashboardLayout>
+    <div className="flex min-h-screen w-full flex-col">
+      <Header title="Admin Portal" />
+      <main className="flex flex-1 flex-col items-center justify-center p-4">
+        <AdminLoginPage onLoginSuccess={handleLoginSuccess} />
+      </main>
+    </div>
   );
 }
 
 
 export default function AdminLayout({ children }: { children: ReactNode }) {
     return (
-        <AdminContent />
+        <AdminLayoutContent>{children}</AdminLayoutContent>
     );
 }

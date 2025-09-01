@@ -49,44 +49,51 @@ export default function AttendancePage() {
   const [floorNumber, setFloorNumber] = useState("");
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const [shake, setShake] = useState(false);
 
   useEffect(() => {
-    const requestPermissions = async () => {
-      // Request camera permission
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-        setHasCameraPermission(true);
-        if (videoRef.current) {
-          videoRef.current.srcObject = stream;
-        }
-      } catch (error) {
-        console.error("Error accessing camera:", error);
-        setHasCameraPermission(false);
+    // Request location permission on mount
+    if (!navigator.geolocation) {
+      setLocationError("Geolocation is not supported by your browser.");
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        setLocation({
+          latitude: position.coords.latitude,
+          longitude: position.coords.longitude,
+        });
+        setLocationError(null);
+      },
+      () => {
+        setLocationError("Unable to retrieve your location. Please enable location services in your browser settings and refresh the page.");
+      },
+      { enableHighAccuracy: true }
+    );
+  }, []);
+
+  const getCameraPermission = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+      setHasCameraPermission(true);
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
       }
+    } catch (error) {
+      console.error("Error accessing camera:", error);
+      setHasCameraPermission(false);
+      toast({
+        variant: 'destructive',
+        title: 'Camera Access Denied',
+        description: 'Please enable camera permissions in your browser settings to use this app.',
+      });
+    }
+  };
 
-      // Request location permission
-      if (!navigator.geolocation) {
-        setLocationError("Geolocation is not supported by your browser.");
-        return;
-      }
-      navigator.geolocation.getCurrentPosition(
-        (position) => {
-          setLocation({
-            latitude: position.coords.latitude,
-            longitude: position.coords.longitude,
-          });
-          setLocationError(null);
-        },
-        () => {
-          setLocationError("Unable to retrieve your location. Please enable location services in your browser settings and refresh the page.");
-        },
-        { enableHighAccuracy: true }
-      );
-    };
 
-    requestPermissions();
-
+  useEffect(() => {
     return () => {
+      // Stop camera stream when component unmounts
       if (videoRef.current && videoRef.current.srcObject) {
         const stream = videoRef.current.srcObject as MediaStream;
         stream.getTracks().forEach(track => track.stop());
@@ -106,6 +113,7 @@ export default function AttendancePage() {
         const dataUrl = canvas.toDataURL("image/jpeg", 0.5);
         setSnapshot(dataUrl);
 
+        // Turn off camera stream after capture
         const stream = video.srcObject as MediaStream;
         if(stream) {
           stream.getTracks().forEach(track => track.stop());
@@ -116,18 +124,6 @@ export default function AttendancePage() {
 
   const handleRetake = () => {
     setSnapshot(null);
-    const getCameraPermission = async () => {
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-        setHasCameraPermission(true);
-        if (videoRef.current) {
-          videoRef.current.srcObject = stream;
-        }
-      } catch (error) {
-        console.error("Error accessing camera:", error);
-        setHasCameraPermission(false);
-      }
-    };
     getCameraPermission();
   };
 
@@ -157,6 +153,8 @@ export default function AttendancePage() {
         title: "Snapshot Required",
         description: "Please take a snapshot before marking attendance.",
       });
+      setShake(true);
+      setTimeout(() => setShake(false), 500);
       return;
     }
 
@@ -177,7 +175,7 @@ export default function AttendancePage() {
           title: "Success!",
           description: "Thank you for marking the attendance.",
         });
-        setTimeout(() => router.push("/"), 1000);
+        setTimeout(() => router.push("/"), 2000);
     } catch (error) {
         console.error("Error marking attendance:", error);
         toast({
@@ -232,16 +230,15 @@ export default function AttendancePage() {
                 <Camera className="text-primary" /> Snapshot
               </Label>
             <div className="relative aspect-video w-full overflow-hidden rounded-lg border-2 border-dashed bg-muted">
-              {hasCameraPermission !== false && (
-                <video
-                  ref={videoRef}
-                  className={`h-full w-full object-cover ${snapshot ? 'hidden' : ''}`}
-                  autoPlay
-                  muted
-                  playsInline
-                />
-              )}
+              <video
+                ref={videoRef}
+                className={`h-full w-full object-cover ${snapshot ? 'hidden' : ''}`}
+                autoPlay
+                muted
+                playsInline
+              />
               <canvas ref={canvasRef} className="hidden" />
+
               {hasCameraPermission === false && (
                 <Alert variant="destructive" className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-center">
                     <VideoOff className="h-10 w-10" />
@@ -249,9 +246,10 @@ export default function AttendancePage() {
                     <AlertDescription>Please allow camera access in your browser settings and refresh the page.</AlertDescription>
                 </Alert>
               )}
-              {hasCameraPermission === null && (
-                 <div className="flex items-center justify-center h-full">
-                    <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+              {hasCameraPermission === null && !snapshot && (
+                 <div className="absolute inset-0 flex flex-col items-center justify-center gap-4">
+                    <p className="text-muted-foreground">Click below to start your camera.</p>
+                    <Button onClick={getCameraPermission}><Camera className="mr-2"/>Enable Camera</Button>
                  </div>
               )}
 
@@ -263,23 +261,22 @@ export default function AttendancePage() {
                 />
               )}
             </div>
-            {hasCameraPermission && (
-              <div className="flex gap-2">
-                <Button
-                  onClick={handleCapture}
-                  disabled={!!snapshot || isMarked || isSubmitting}
-                  className="flex-1"
-                >
-                  <Camera className="mr-2" />
-                  {snapshot ? "Snapshot Taken" : "Take Snapshot"}
+            
+            <div className={`flex gap-2 ${shake ? 'animate-shake' : ''}`}>
+              <Button
+                onClick={handleCapture}
+                disabled={!!snapshot || !hasCameraPermission || isMarked || isSubmitting}
+                className="flex-1"
+              >
+                <Camera className="mr-2" />
+                {snapshot ? "Snapshot Taken" : "Take Snapshot"}
+              </Button>
+              {snapshot && (
+                <Button onClick={handleRetake} variant="outline"  disabled={isMarked || isSubmitting}>
+                  Retake
                 </Button>
-                {snapshot && (
-                  <Button onClick={handleRetake} variant="outline"  disabled={isMarked || isSubmitting}>
-                    Retake
-                  </Button>
-                )}
-              </div>
-            )}
+              )}
+            </div>
           </div>
 
           <div className="space-y-4">
@@ -313,7 +310,7 @@ export default function AttendancePage() {
         <CardFooter>
           <Button
             onClick={handleMarkAttendance}
-            disabled={isSubmitting || !location || !snapshot || isMarked || !hasCameraPermission}
+            disabled={isSubmitting || !location || !snapshot || isMarked}
             className="w-full py-6 text-lg font-bold"
           >
             {isSubmitting ? (
@@ -329,6 +326,18 @@ export default function AttendancePage() {
           </Button>
         </CardFooter>
       </Card>
+      <style jsx>{`
+        .animate-shake {
+          animation: shake 0.5s cubic-bezier(.36,.07,.19,.97) both;
+          transform: translate3d(0, 0, 0);
+        }
+        @keyframes shake {
+          10%, 90% { transform: translate3d(-1px, 0, 0); }
+          20%, 80% { transform: translate3d(2px, 0, 0); }
+          30%, 50%, 70% { transform: translate3d(-4px, 0, 0); }
+          40%, 60% { transform: translate3d(4px, 0, 0); }
+        }
+      `}</style>
     </div>
   );
 }

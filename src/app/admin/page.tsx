@@ -20,11 +20,10 @@ import { Shield } from "lucide-react";
 export default function AdminLoginPage({ onLoginSuccess }: { onLoginSuccess: () => void }) {
   const [password, setPassword] = useState("");
   const { toast } = useToast();
-  const router = useRouter();
 
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
-    if (password === "manisimha") {
+    if (password === process.env.NEXT_PUBLIC_ADMIN_PASSWORD) {
       toast({
         title: "Success",
         description: "Logged in successfully.",
