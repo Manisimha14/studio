@@ -65,24 +65,36 @@ export default function AttendancePage() {
        const devices = await navigator.mediaDevices.enumerateDevices();
        const videoInputs = devices.filter(device => device.kind === 'videoinput');
        
-       const suspiciousKeywords = ['obs', 'droidcam', 'splitcam', 'vcam'];
+       if (videoInputs.length === 0) {
+         throw new Error("No camera found.");
+       }
+
+       const suspiciousKeywords = ['obs', 'droidcam', 'splitcam', 'vcam', 'virtual', 'proxy'];
        const isVirtualCamera = videoInputs.some(device => 
          suspiciousKeywords.some(keyword => device.label.toLowerCase().includes(keyword))
        );
+       
+       const hasPhysicalCamera = videoInputs.some(device => 
+         !suspiciousKeywords.some(keyword => device.label.toLowerCase().includes(keyword))
+       );
 
-       if (isVirtualCamera) {
+       if (isVirtualCamera && !hasPhysicalCamera) {
           setVirtualCameraDetected(true);
           setHasCameraPermission(false);
           playError();
           toast({
             variant: 'destructive',
-            title: 'Unsupported Camera Detected',
-            description: 'Use of virtual camera software like OBS or Droidcam is not allowed.',
+            title: 'Physical Webcam Required',
+            description: 'Use of virtual cameras is not allowed. Please connect a physical webcam.',
+            duration: 5000,
           });
           return;
        }
 
-      const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+      const stream = await navigator.mediaDevices.getUserMedia({ video: {
+        // Try to force a real camera by default
+        facingMode: 'user'
+      } });
       setHasCameraPermission(true);
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
@@ -91,11 +103,18 @@ export default function AttendancePage() {
       console.error("Error accessing camera:", error);
       setHasCameraPermission(false);
       playError();
-      if ((error as Error).name !== 'NotAllowedError') {
-        toast({
+      const err = error as Error;
+      if (err.name === 'NotAllowedError') {
+         toast({
             variant: 'destructive',
             title: 'Camera Access Denied',
             description: 'Please enable camera permissions in your browser settings.',
+        });
+      } else {
+        toast({
+            variant: 'destructive',
+            title: 'Camera Error',
+            description: err.message || "Could not access the camera.",
         });
       }
     }
@@ -119,12 +138,17 @@ export default function AttendancePage() {
     if (videoRef.current && canvasRef.current) {
       const video = videoRef.current;
       const canvas = canvasRef.current;
-      canvas.width = video.videoWidth;
-      canvas.height = video.videoHeight;
+      // Set canvas to a lower resolution to reduce data size and for faster processing
+      const targetWidth = 480;
+      const scale = targetWidth / video.videoWidth;
+      canvas.width = targetWidth;
+      canvas.height = video.videoHeight * scale;
+
       const context = canvas.getContext("2d");
       if (context) {
-        context.drawImage(video, 0, 0, video.videoWidth, video.videoHeight);
-        const dataUrl = canvas.toDataURL("image/jpeg", 0.5);
+        context.drawImage(video, 0, 0, canvas.width, canvas.height);
+        // Use a higher quality JPEG for better image clarity
+        const dataUrl = canvas.toDataURL("image/jpeg", 0.8);
         setSnapshot(dataUrl);
 
         const stream = video.srcObject as MediaStream;
@@ -332,18 +356,18 @@ export default function AttendancePage() {
                 <canvas ref={canvasRef} className="hidden" />
                  
                 {virtualCameraDetected && (
-                   <Alert variant="destructive" className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-center">
+                   <Alert variant="destructive" className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-center p-4">
                         <Ban className="h-10 w-10" />
-                        <AlertTitle>Unsupported Camera Detected</AlertTitle>
-                        <AlertDescription>Please disable virtual camera software (like OBS) and use a physical webcam.</AlertDescription>
+                        <AlertTitle>Physical Webcam Required</AlertTitle>
+                        <AlertDescription>The use of virtual camera software is not permitted. Please use a physical webcam.</AlertDescription>
                     </Alert>
                 )}
 
                 {hasCameraPermission === false && !virtualCameraDetected && (
-                    <Alert variant="destructive" className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-center">
+                    <Alert variant="destructive" className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-center p-4">
                         <VideoOff className="h-10 w-10" />
                         <AlertTitle>Camera Access Denied</AlertTitle>
-                        <AlertDescription>Allow camera access in your browser settings and refresh.</AlertDescription>
+                        <AlertDescription>Please allow camera access in your browser settings and ensure a physical webcam is connected.</AlertDescription>
                     </Alert>
                 )}
                 
@@ -404,3 +428,5 @@ export default function AttendancePage() {
     </div>
   );
 }
+
+    
