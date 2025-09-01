@@ -30,8 +30,15 @@ function AdminContent() {
 
   useEffect(() => {
     const session = window.localStorage.getItem('adminAuthenticated');
-    setIsAuthenticated(session === 'true');
-  }, [pathname]);
+    const authenticated = session === 'true';
+    setIsAuthenticated(authenticated);
+
+    if (authenticated && pathname === '/admin') {
+      router.replace('/admin/dashboard');
+    } else if (!authenticated && pathname === '/admin/dashboard') {
+      router.replace('/admin');
+    }
+  }, [pathname, router]);
 
   const handleLoginSuccess = () => {
     window.localStorage.setItem('adminAuthenticated', 'true');
@@ -42,7 +49,7 @@ function AdminContent() {
   const handleLogout = () => {
     window.localStorage.removeItem('adminAuthenticated');
     setIsAuthenticated(false);
-    router.replace('/admin');
+    router.replace('/');
   };
 
 
@@ -51,12 +58,10 @@ function AdminContent() {
   }
   
   if (!isAuthenticated && pathname === '/admin/dashboard') {
-     router.replace('/admin');
      return <Loading />;
   }
   
   if (isAuthenticated && pathname === '/admin') {
-      router.replace('/admin/dashboard');
       return <Loading />;
   }
 
