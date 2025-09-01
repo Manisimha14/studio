@@ -92,18 +92,21 @@ export default function VerificationStep({ livenessChallenge, onVerified, isSubm
 
   const checkLiveness = useCallback((blendshapes: any[]) => {
       if (!blendshapes || blendshapes.length === 0) return false;
-      const scores = blendshapes[0].scores;
+      const scores = blendshapes[0]?.scores;
+      if (!scores) return false; // Safety check
+
+      const getScore = (name: string) => scores.find((s: any) => s.categoryName === name)?.score || 0;
 
       switch(livenessChallenge.key) {
           case 'smile':
-              return scores.find((s: any) => s.categoryName === 'mouthSmileLeft').score > BLENDSHAPE_THRESHOLD &&
-                     scores.find((s: any) => s.categoryName === 'mouthSmileRight').score > BLENDSHAPE_THRESHOLD;
+              return getScore('mouthSmileLeft') > BLENDSHAPE_THRESHOLD &&
+                     getScore('mouthSmileRight') > BLENDSHAPE_THRESHOLD;
           case 'mouthOpen':
-              return scores.find((s: any) => s.categoryName === 'jawOpen').score > BLENDSHAPE_THRESHOLD;
+              return getScore('jawOpen') > BLENDSHAPE_THRESHOLD;
           case 'eyeBlinkLeft':
-              return scores.find((s: any) => s.categoryName === 'eyeBlinkLeft').score > BLENDSHAPE_THRESHOLD;
+              return getScore('eyeBlinkLeft') > BLENDSHAPE_THRESHOLD;
           case 'eyeBlinkRight':
-              return scores.find((s: any) => s.categoryName === 'eyeBlinkRight').score > BLENDSHAPE_THRESHOLD;
+              return getScore('eyeBlinkRight') > BLENDSHAPE_THRESHOLD;
           default:
               return false;
       }
