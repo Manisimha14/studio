@@ -31,17 +31,14 @@ import {
   Building,
   AlertTriangle,
 } from "lucide-react";
+import { useGeolocator } from "@/hooks/use-geolocator";
 
 export default function AttendancePage() {
   const { addRecord } = useAttendance();
   const { toast } = useToast();
   const router = useRouter();
+  const { location, error, status } = useGeolocator({ enableHighAccuracy: true });
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [location, setLocation] = useState<{
-    latitude: number;
-    longitude: number;
-  } | null>(null);
-  const [locationError, setLocationError] = useState<string | null>(null);
   const [isMarked, setIsMarked] = useState(false);
   const [hasCameraPermission, setHasCameraPermission] = useState<boolean | null>(null);
   const [snapshot, setSnapshot] = useState<string | null>(null);
@@ -50,26 +47,6 @@ export default function AttendancePage() {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [shake, setShake] = useState(false);
-
-  useEffect(() => {
-    if (!navigator.geolocation) {
-      setLocationError("Geolocation is not supported by your browser.");
-      return;
-    }
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        setLocation({
-          latitude: position.coords.latitude,
-          longitude: position.coords.longitude,
-        });
-        setLocationError(null);
-      },
-      () => {
-        setLocationError("Unable to retrieve your location. Please enable location services and refresh.");
-      },
-      { enableHighAccuracy: true }
-    );
-  }, []);
 
   const getCameraPermission = async () => {
     try {
@@ -180,6 +157,43 @@ export default function AttendancePage() {
 
   const isFormDisabled = isMarked || isSubmitting;
 
+  const renderLocationStatus = () => {
+    switch (status) {
+      case 'pending':
+        return (
+          <div className="flex items-center gap-2 text-sm text-muted-foreground p-4 justify-center">
+            <Loader2 className="h-4 w-4 animate-spin" />
+            <span>Acquiring location...</span>
+          </div>
+        );
+      case 'denied':
+      case 'error':
+        return (
+          <Alert variant="destructive">
+            <AlertTriangle className="h-4 w-4" />
+            <AlertTitle>Location Error</AlertTitle>
+            <AlertDescription>{error?.message || 'Could not get your location. Please enable it in your browser settings.'}</AlertDescription>
+          </Alert>
+        );
+      case 'success':
+        if (location) {
+          return (
+            <Alert>
+              <MapPin className="h-4 w-4" />
+              <AlertTitle>Location Acquired</AlertTitle>
+              <AlertDescription>
+                  Lat: {location.latitude.toFixed(4)}, Long: {location.longitude.toFixed(4)}
+              </AlertDescription>
+            </Alert>
+          );
+        }
+        return null;
+      default:
+        return null;
+    }
+  };
+
+
   return (
     <div className="flex items-start justify-center py-8">
       <Card className="w-full max-w-lg shadow-lg">
@@ -275,28 +289,7 @@ export default function AttendancePage() {
             <Label className="flex items-center gap-2 font-semibold">
                 <MapPin className="text-primary" /> Live Location
               </Label>
-            {locationError && (
-                 <Alert variant="destructive">
-                    <AlertTriangle className="h-4 w-4" />
-                    <AlertTitle>Location Error</AlertTitle>
-                    <AlertDescription>{locationError}</AlertDescription>
-                  </Alert>
-              )}
-             {location && !locationError && (
-                 <Alert>
-                    <MapPin className="h-4 w-4" />
-                    <AlertTitle>Location Acquired</AlertTitle>
-                    <AlertDescription>
-                        Lat: {location.latitude.toFixed(4)}, Long: {location.longitude.toFixed(4)}
-                    </AlertDescription>
-                  </Alert>
-             )}
-             {!location && !locationError && (
-                  <div className="flex items-center gap-2 text-sm text-muted-foreground p-4 justify-center">
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    <span>Acquiring location...</span>
-                  </div>
-              )}
+            {renderLocationStatus()}
           </div>
         </CardContent>
         <CardFooter>
