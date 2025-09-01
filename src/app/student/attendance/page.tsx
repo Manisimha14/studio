@@ -35,7 +35,8 @@ import {
   Ban,
 } from "lucide-react";
 import { useGeolocator } from "@/hooks/use-geolocator";
-import useSound from "use-sound";
+import { playSound } from "@/lib/utils";
+
 
 export default function AttendancePage() {
   const { addRecord } = useAttendance();
@@ -52,11 +53,6 @@ export default function AttendancePage() {
   const [virtualCameraDetected, setVirtualCameraDetected] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
-
-  const [playClick] = useSound('/sounds/click.mp3', { volume: 0.5 });
-  const [playSuccess] = useSound('/sounds/success.mp3', { volume: 0.5 });
-  const [playError] = useSound('/sounds/error.mp3', { volume: 0.5 });
-  const [playCapture] = useSound('/sounds/capture.mp3', { volume: 0.5 });
 
   const getCameraPermission = async () => {
     setVirtualCameraDetected(false);
@@ -80,7 +76,7 @@ export default function AttendancePage() {
        if (isVirtualCamera && !hasPhysicalCamera) {
           setVirtualCameraDetected(true);
           setHasCameraPermission(false);
-          playError();
+          playSound('error');
           toast({
             variant: 'destructive',
             title: 'Physical Webcam Required',
@@ -100,7 +96,7 @@ export default function AttendancePage() {
     } catch (error) {
       console.error("Error accessing camera:", error);
       setHasCameraPermission(false);
-      playError();
+      playSound('error');
       const err = error as Error;
       if (err.name === 'NotAllowedError') {
          toast({
@@ -132,7 +128,7 @@ export default function AttendancePage() {
 
 
   const handleCapture = () => {
-    playCapture();
+    playSound('capture');
     if (videoRef.current && canvasRef.current) {
       const video = videoRef.current;
       const canvas = canvasRef.current;
@@ -156,14 +152,14 @@ export default function AttendancePage() {
   };
 
   const handleRetake = () => {
-    playClick();
+    playSound('click');
     setSnapshot(null);
   };
 
   const handleNextStep = () => {
-     playClick();
+     playSound('click');
      if (!studentName || !floorNumber) {
-      playError();
+      playSound('error');
       toast({
         variant: "destructive",
         title: "Missing Information",
@@ -172,7 +168,7 @@ export default function AttendancePage() {
       return;
     }
     if (!location) {
-      playError();
+      playSound('error');
       toast({
         variant: "destructive",
         title: "Location Error",
@@ -185,9 +181,9 @@ export default function AttendancePage() {
 
 
   const handleMarkAttendance = async () => {
-    playClick();
+    playSound('click');
     if (!snapshot) {
-        playError();
+        playSound('error');
         toast({
             variant: "destructive",
             title: "Snapshot Required",
@@ -203,7 +199,7 @@ export default function AttendancePage() {
           location: location!, 
           photo: snapshot,
         });
-        playSuccess();
+        playSound('success');
         setStep(3);
         toast({
           title: "Success!",
@@ -213,7 +209,7 @@ export default function AttendancePage() {
 
     } catch (error) {
         console.error("Error marking attendance:", error);
-        playError();
+        playSound('error');
         const errorMessage = (error as Error)?.message || "Could not mark attendance. Please try again.";
         toast({
             variant: "destructive",
@@ -375,7 +371,7 @@ export default function AttendancePage() {
                  {hasCameraPermission === null && !snapshot && (
                     <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 p-4 text-center">
                         <p className="text-muted-foreground">The app needs camera access to take a snapshot.</p>
-                        <Button onClick={() => { playClick(); getCameraPermission(); }}><Camera className="mr-2"/>Enable Camera</Button>
+                        <Button onClick={() => { playSound('click'); getCameraPermission(); }}><Camera className="mr-2"/>Enable Camera</Button>
                     </div>
                 )}
 
@@ -418,7 +414,7 @@ export default function AttendancePage() {
                     )}
                     {isSubmitting ? "Submitting..." : "Submit Attendance"}
                 </Button>
-                 <Button variant="link" onClick={() => { playClick(); setStep(1); }} disabled={isFormDisabled}>
+                 <Button variant="link" onClick={() => { playSound('click'); setStep(1); }} disabled={isFormDisabled}>
                      <ArrowLeft className="mr-2" />
                      Go Back
                  </Button>

@@ -5,24 +5,23 @@ import { Home, GraduationCap, LogOut, ArrowLeft } from 'lucide-react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { useRouter, usePathname } from 'next/navigation';
-import useSound from 'use-sound';
+import { playSound } from '@/lib/utils';
 
 export function Header({ title, onLogout }: { title: string; onLogout?: () => void }) {
   const router = useRouter();
   const pathname = usePathname();
-  const [playClick] = useSound('/sounds/click.mp3', { volume: 0.5 });
   
   const showBackButton = pathname !== '/';
 
   const handleLogoutClick = () => {
-    playClick();
+    playSound('click');
     if (onLogout) {
         onLogout();
     }
   }
 
   const handleBackClick = () => {
-    playClick();
+    playSound('click');
     router.back();
   }
 
@@ -40,14 +39,14 @@ export function Header({ title, onLogout }: { title: string; onLogout?: () => vo
             <span className="sr-only">Back</span>
           </Button>
         ) : (
-           <Link href="/" className="flex items-center gap-2" onClick={() => playClick()}>
+           <Link href="/" className="flex items-center gap-2" onClick={() => playSound('click')}>
             <GraduationCap className="h-6 w-6 text-primary" />
            </Link>
         )}
         <h1 className="text-xl font-semibold">{title}</h1>
       </div>
       <div className="flex items-center gap-4">
-        <Link href="/" className="flex items-center gap-2" onClick={() => playClick()}>
+        <Link href="/" className="flex items-center gap-2" onClick={() => playSound('click')}>
             <span className="hidden text-lg font-bold text-primary sm:inline">
               Smart Uniworld 1
             </span>

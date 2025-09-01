@@ -35,9 +35,11 @@ export default function RootLayout({
           {children}
           <Toaster />
         </AttendanceProvider>
-        <audio id="click-sound" src="/sounds/click.mp3" preload="auto"></audio>
-        <audio id="success-sound" src="/sounds/success.mp3" preload="auto"></audio>
-        <audio id="error-sound" src="/sounds/error.mp3" preload="auto"></audio>
+        <audio id="sound-click" src="/sounds/click.mp3" preload="auto"></audio>
+        <audio id="sound-success" src="/sounds/success.mp3" preload="auto"></audio>
+        <audio id="sound-error" src="/sounds/error.mp3" preload="auto"></audio>
+        <audio id="sound-delete" src="/sounds/delete.mp3" preload="auto"></audio>
+        <audio id="sound-capture" src="/sounds/capture.mp3" preload="auto"></audio>
       </body>
     </html>
   );

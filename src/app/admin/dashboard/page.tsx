@@ -35,7 +35,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
 import { format } from 'date-fns';
-import useSound from "use-sound";
+import { playSound } from "@/lib/utils";
 
 
 export default function AdminDashboard() {
@@ -53,29 +53,24 @@ export default function AdminDashboard() {
   
   const [recordToDelete, setRecordToDelete] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
-
-  const [playClick] = useSound('/sounds/click.mp3', { volume: 0.5 });
-  const [playDelete] = useSound('/sounds/delete.mp3', { volume: 0.4 });
-  const [playSuccess] = useSound('/sounds/success.mp3', { volume: 0.5 });
-  const [playError] = useSound('/sounds/error.mp3', { volume: 0.5 });
   
   useEffect(() => {
     fetchInitialRecords();
   }, [fetchInitialRecords]);
 
   const handleDelete = async () => {
-    playDelete();
+    playSound('delete');
     if (recordToDelete !== null) {
       setIsDeleting(true);
       try {
         await removeRecord(recordToDelete);
-        playSuccess();
+        playSound('success');
         toast({
           title: "Record Deleted",
           description: "The attendance record has been successfully deleted.",
         });
       } catch (error) {
-        playError();
+        playSound('error');
         toast({
             variant: "destructive",
             title: "Deletion Failed",
@@ -171,7 +166,7 @@ export default function AdminDashboard() {
                             <Button
                               variant="destructive"
                               size="sm"
-                              onClick={() => { playClick(); setRecordToDelete(record.id); }}
+                              onClick={() => { playSound('click'); setRecordToDelete(record.id); }}
                               disabled={isDeleting}
                             >
                               <Trash2 className="mr-2 h-4 w-4" />
@@ -205,7 +200,7 @@ export default function AdminDashboard() {
             {hasMore && !loading && (
                 <Button
                     variant="outline"
-                    onClick={() => { playClick(); fetchMoreRecords();}}
+                    onClick={() => { playSound('click'); fetchMoreRecords();}}
                     disabled={loadingMore}
                 >
                     {loadingMore ? (

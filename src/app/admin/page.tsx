@@ -16,28 +16,25 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { Shield } from "lucide-react";
-import useSound from "use-sound";
+import { playSound } from "@/lib/utils";
+
 
 export default function AdminLoginPage({ onLoginSuccess }: { onLoginSuccess: () => void }) {
   const [password, setPassword] = useState("");
   const { toast } = useToast();
 
-  const [playClick] = useSound('/sounds/click.mp3', { volume: 0.5 });
-  const [playSuccess] = useSound('/sounds/success.mp3', { volume: 0.5 });
-  const [playError] = useSound('/sounds/error.mp3', { volume: 0.5 });
-
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
-    playClick();
+    playSound('click');
     if (password === process.env.NEXT_PUBLIC_ADMIN_PASSWORD) {
-      playSuccess();
+      playSound('success');
       toast({
         title: "Success",
         description: "Logged in successfully.",
       });
       onLoginSuccess();
     } else {
-      playError();
+      playSound('error');
       toast({
         variant: "destructive",
         title: "Error",
