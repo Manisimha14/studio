@@ -43,7 +43,7 @@ import { playSound } from "@/lib/utils";
 import {
   FaceLandmarker,
   FilesetResolver,
-  type FaceLandmarkerResult,
+  FaceLandmarkerResult,
 } from "@mediapipe/tasks-vision";
 import { Badge } from "@/components/ui/badge";
 
