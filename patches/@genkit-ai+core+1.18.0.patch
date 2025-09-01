@@ -1,0 +1,13 @@
+diff --git a/node_modules/@genkit-ai/core/package.json b/node_modules/@genkit-ai/core/package.json
+index 47c327261d76378873d348987d35368a5204482a..30a3b01859556828238f4d5464a66e5f3ba21598 100644
+--- a/node_modules/@genkit-ai/core/package.json
++++ b/node_modules/@genkit-ai/core/package.json
+@@ -62,7 +62,6 @@
+     "@genkit-ai/firebase": "^1.16.1"
+   },
+   "peerDependencies": {
+-    "genkit": "^1.18.0"
+   },
+   "peerDependenciesMeta": {
+     "@genkit-ai/firebase": {
+
