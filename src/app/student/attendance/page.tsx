@@ -43,7 +43,7 @@ import { playSound } from "@/lib/utils";
 import {
   FaceLandmarker,
   FilesetResolver,
-  type FaceLandmarkerResult,
+  FaceLandmarkerResult,
 } from "@mediapipe/tasks-vision";
 import { Badge } from "@/components/ui/badge";
 
@@ -62,15 +62,15 @@ const getDeviceId = () => {
 };
 
 const LIVENESS_CHALLENGES = [
-    "Smile for the camera",
-    "Slowly blink three times",
-    "Turn your head to the left",
-    "Turn your head to the right",
-    "Hold up your right hand"
+    { action: "Smile for the camera", key: "smile" },
+    { action: "Open your mouth", key: "mouthOpen" },
+    { action: "Blink your left eye", key: "eyeBlinkLeft" },
+    { action: "Blink your right eye", key: "eyeBlinkRight" },
 ];
 
 let faceLandmarker: FaceLandmarker | undefined;
 let lastVideoTime = -1;
+const BLENDSHAPE_THRESHOLD = 0.5;
 
 export default function AttendancePage() {
   const { addRecord } = useAttendance();
@@ -88,6 +88,8 @@ export default function AttendancePage() {
   const [virtualCameraDetected, setVirtualCameraDetected] = useState(false);
   const [faceDetected, setFaceDetected] = useState(false);
   const [isMediaPipeLoading, setIsMediaPipeLoading] = useState(true);
+  const [livenessChallengeMet, setLivenessChallengeMet] = useState(false);
+
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const animationFrameId = useRef<number>();
@@ -123,6 +125,25 @@ export default function AttendancePage() {
     }
   }, [toast]);
   
+  const checkLiveness = useCallback((blendshapes: any[]) => {
+      if (!blendshapes || blendshapes.length === 0) return false;
+      const scores = blendshapes[0].scores;
+
+      switch(livenessChallenge.key) {
+          case 'smile':
+              return scores.find((s: any) => s.categoryName === 'mouthSmileLeft').score > BLENDSHAPE_THRESHOLD &&
+                     scores.find((s: any) => s.categoryName === 'mouthSmileRight').score > BLENDSHAPE_THRESHOLD;
+          case 'mouthOpen':
+              return scores.find((s: any) => s.categoryName === 'jawOpen').score > BLENDSHAPE_THRESHOLD;
+          case 'eyeBlinkLeft':
+              return scores.find((s: any) => s.categoryName === 'eyeBlinkLeft').score > BLENDSHAPE_THRESHOLD;
+          case 'eyeBlinkRight':
+              return scores.find((s: any) => s.categoryName === 'eyeBlinkRight').score > BLENDSHAPE_THRESHOLD;
+          default:
+              return false;
+      }
+  }, [livenessChallenge.key]);
+
   const predictWebcam = useCallback(() => {
     if (!videoRef.current || !faceLandmarker) {
       return;
@@ -135,13 +156,17 @@ export default function AttendancePage() {
       
       if (results.faceLandmarks && results.faceLandmarks.length > 0) {
         setFaceDetected(true);
+        if (step === 3) {
+            setLivenessChallengeMet(checkLiveness(results.faceBlendshapes));
+        }
       } else {
         setFaceDetected(false);
+        setLivenessChallengeMet(false);
       }
     }
 
     animationFrameId.current = requestAnimationFrame(predictWebcam);
-  }, []);
+  }, [step, checkLiveness]);
   
   const getCameraPermission = useCallback(async (isRetry = false) => {
     if (isRetry) {
@@ -246,6 +271,7 @@ export default function AttendancePage() {
         const dataUrl = canvas.toDataURL("image/jpeg", 0.8);
         setSnapshot(dataUrl);
         setFaceDetected(false); // Stop detection after capture
+        setLivenessChallengeMet(false);
         if (animationFrameId.current) {
           cancelAnimationFrame(animationFrameId.current);
         }
@@ -312,7 +338,7 @@ export default function AttendancePage() {
           location: location!, 
           photo: snapshot,
           deviceId: deviceId,
-          livenessChallenge: livenessChallenge
+          livenessChallenge: livenessChallenge.action
         });
         playSound('success');
         setStep(4);
@@ -334,7 +360,7 @@ export default function AttendancePage() {
     } finally {
         setIsSubmitting(false);
     }
-  }, [snapshot, addRecord, studentName, floorNumber, location, toast, router, deviceId, livenessChallenge]);
+  }, [snapshot, addRecord, studentName, floorNumber, location, toast, router, deviceId, livenessChallenge.action]);
 
   const isFormDisabled = isSubmitting;
 
@@ -386,13 +412,20 @@ export default function AttendancePage() {
         <canvas ref={canvasRef} className="hidden" />
         
         {step !== 1 && !snapshot && (
-           <div className="absolute bottom-2 right-2 z-10">
+           <div className="absolute bottom-2 right-2 z-10 flex gap-2">
               {isMediaPipeLoading ? (
                   <Badge variant="secondary"><Loader2 className="mr-2 h-3 w-3 animate-spin"/>Loading AI</Badge>
               ) : faceDetected ? (
                   <Badge variant="default" className="bg-green-600"><UserCheck className="mr-2 h-3 w-3"/>Face Detected</Badge>
               ) : (
                   <Badge variant="destructive"><Smile className="mr-2 h-3 w-3"/>No Face Detected</Badge>
+              )}
+               {step === 3 && faceDetected && (
+                 livenessChallengeMet ? (
+                     <Badge variant="default" className="bg-green-600"><Sparkles className="mr-2 h-3 w-3"/>Challenge Met!</Badge>
+                 ) : (
+                     <Badge variant="secondary"><Sparkles className="mr-2 h-3 w-3"/>Challenge Pending</Badge>
+                 )
               )}
            </div>
         )}
@@ -429,7 +462,7 @@ export default function AttendancePage() {
             />
         )}
     </div>
-  ), [snapshot, virtualCameraDetected, hasCameraPermission, getCameraPermission, faceDetected, isMediaPipeLoading, step]);
+  ), [snapshot, virtualCameraDetected, hasCameraPermission, getCameraPermission, faceDetected, isMediaPipeLoading, step, livenessChallengeMet]);
 
 
   if (step === 4) {
@@ -546,7 +579,7 @@ export default function AttendancePage() {
                     <Sparkles className="h-4 w-4" />
                     <AlertTitle>Your Challenge:</AlertTitle>
                     <AlertDescription className="text-lg font-semibold text-primary">
-                        {livenessChallenge}
+                        {livenessChallenge.action}
                     </AlertDescription>
                 </Alert>
             </CardContent>
@@ -568,15 +601,15 @@ export default function AttendancePage() {
                 {renderCameraView()}
                 <Alert variant="default" className="border-blue-500/50 bg-blue-500/10 text-blue-700">
                     <AlertTriangle className="h-4 w-4 text-blue-600" />
-                    <AlertTitle>Reminder: {livenessChallenge}</AlertTitle>
+                    <AlertTitle>Reminder: {livenessChallenge.action}</AlertTitle>
                     <AlertDescription>
-                        Please perform this action while taking the snapshot.
+                        Please perform this action to enable the snapshot button.
                     </AlertDescription>
                 </Alert>
                 <div className="flex gap-2">
                 <Button
                     onClick={handleCapture}
-                    disabled={!!snapshot || !hasCameraPermission || isFormDisabled || !faceDetected}
+                    disabled={!!snapshot || !hasCameraPermission || isFormDisabled || !livenessChallengeMet}
                     className="flex-1 transition-all hover:scale-105 active-scale-100"
                 >
                     <Camera className="mr-2" />

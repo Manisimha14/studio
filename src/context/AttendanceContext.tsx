@@ -31,7 +31,7 @@ export interface AttendanceRecord {
   photo: string | null;
   floorNumber: string;
   deviceId: string;
-  livenessChallenge?: string;
+  livenessChallenge: string;
 }
 
 interface NewRecord {
