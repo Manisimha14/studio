@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState, useRef, useEffect, useCallback } from "react";
@@ -31,9 +30,9 @@ interface VerificationStepProps {
     onBack: () => void;
 }
 
-
 // --- Final Optimization Configuration ---
-const DETECTION_INTERVAL_MS = 750; // Balance responsiveness and performance
+// The continuous scan can be even less frequent now.
+const CONTINUOUS_DETECTION_INTERVAL_MS = 1500; 
 const VIDEO_CONSTRAINTS = {
   width: { ideal: 640 },
   height: { ideal: 480 },
@@ -43,60 +42,100 @@ const VIDEO_CONSTRAINTS = {
 export default function VerificationStep({ onVerified, isSubmitting, onBack }: VerificationStepProps) {
   const [cameraStatus, setCameraStatus] = useState("initializing");
   const [detectorStatus, setDetectorStatus] = useState("loading");
-  const [isProxyDetected, setIsProxyDetected] = useState(false);
+  const [isProxyDetected, setIsProxyDetected] = useState(false); // For UI warning only
+  const [isVerifying, setIsVerifying] = useState(false); // For final check state
 
   const videoRef = useRef<HTMLVideoElement>(null);
-  const canvasRef = useRef<HTMLCanvasElement>(null); // For the final snapshot
-  const offscreenCanvasRef = useRef<HTMLCanvasElement | null>(null); // For ImageBitmap creation
+  const canvasRef = useRef<HTMLCanvasElement>(null);
   const workerRef = useRef<Worker | null>(null);
   const requestRef = useRef<number>();
   const lastCheckTime = useRef(0);
-  const isProxyDetectedRef = useRef(false);
 
-  // The main loop that sends frames to the worker
-  const predictWebcam = useCallback(async () => {
-    // Ensure everything is ready for detection
+  // A ref to hold a Promise resolver for the one-time check
+  const finalCheckResolver = useRef<((value: boolean) => void) | null>(null);
+
+  // This is now the main capture and verification logic
+  const handleCapture = async () => {
+    playSound('capture');
+    if (!workerRef.current || !videoRef.current || !canvasRef.current) return;
+
+    setIsVerifying(true);
+
+    // 1. Draw current video frame to main canvas for high-quality snapshot
+    const video = videoRef.current;
+    const canvas = canvasRef.current;
+    const targetWidth = 480;
+    const scale = targetWidth / video.videoWidth;
+    canvas.width = targetWidth;
+    canvas.height = video.videoHeight * scale;
+
+    const context = canvas.getContext("2d");
+    if (context) {
+        // Flip the image horizontally for a mirror effect
+        context.translate(canvas.width, 0);
+        context.scale(-1, 1);
+        context.drawImage(video, 0, 0, canvas.width, canvas.height);
+        context.setTransform(1, 0, 0, 1, 0, 0);
+    }
+    
+    const dataUrl = canvas.toDataURL("image/jpeg", 0.8);
+    
+    // 2. Perform a final, high-confidence check
+    const imageBitmap = await createImageBitmap(video);
+    workerRef.current.postMessage({ type: 'detect', frame: imageBitmap }, [imageBitmap]);
+
+    const isProxyInFinalCheck = await new Promise<boolean>((resolve) => {
+      finalCheckResolver.current = resolve;
+    });
+
+    // 3. Submit or reject based on the final check
+    if (isProxyInFinalCheck) {
+      playSound('error');
+      // You could show a more specific error toast/message here
+      console.error("Submission failed: A phone was detected in the final snapshot.");
+      setIsVerifying(false);
+    } else {
+      await onVerified(dataUrl);
+    }
+  };
+
+  // The continuous loop is now only for the UI warning
+  const continuousPredictionLoop = useCallback(async () => {
     if (cameraStatus === "ready" && detectorStatus === "ready" && workerRef.current && videoRef.current && videoRef.current.readyState >= 3) {
       const now = performance.now();
-      if (now - lastCheckTime.current > DETECTION_INTERVAL_MS) {
+      if (now - lastCheckTime.current > CONTINUOUS_DETECTION_INTERVAL_MS) {
         lastCheckTime.current = now;
-
-        if (!offscreenCanvasRef.current) {
-          offscreenCanvasRef.current = document.createElement('canvas');
-          offscreenCanvasRef.current.width = videoRef.current.videoWidth;
-          offscreenCanvasRef.current.height = videoRef.current.videoHeight;
-        }
-
-        const context = offscreenCanvasRef.current.getContext('2d');
-        if (context) {
-          context.drawImage(videoRef.current, 0, 0);
-          const imageBitmap = await createImageBitmap(offscreenCanvasRef.current);
-          
-          // Post the bitmap to the worker, transferring ownership (zero-copy)
-          workerRef.current.postMessage({ type: 'detect', frame: imageBitmap }, [imageBitmap]);
-        }
+        const imageBitmap = await createImageBitmap(videoRef.current);
+        workerRef.current.postMessage({ type: 'detect', frame: imageBitmap }, [imageBitmap]);
       }
     }
-    requestRef.current = requestAnimationFrame(predictWebcam);
+    requestRef.current = requestAnimationFrame(continuousPredictionLoop);
   }, [cameraStatus, detectorStatus]);
 
-  // The main effect for setup and cleanup
+  // Effect for setup and message handling
   useEffect(() => {
     workerRef.current = new Worker('/detection.worker.js');
-
+    
+    // This handler now routes results based on context
     workerRef.current.onmessage = (event) => {
       const { type, isProxyDetected, error } = event.data;
       if (type === 'ready') setDetectorStatus("ready");
-      else if (type === 'error') {
+       else if (type === 'error') {
         console.error("Worker initialization failed:", error);
         setDetectorStatus("failed");
-      } else if (type === 'result') {
-        if (isProxyDetectedRef.current !== isProxyDetected) {
-          isProxyDetectedRef.current = isProxyDetected;
+      }
+      else if (type === 'result') {
+        // If finalCheckResolver is active, this result is for the final check
+        if (finalCheckResolver.current) {
+          finalCheckResolver.current(isProxyDetected);
+          finalCheckResolver.current = null; // Reset after use
+        } else {
+          // Otherwise, it's for the continuous UI warning
           setIsProxyDetected(isProxyDetected);
         }
       }
     };
+    
     workerRef.current.postMessage({ type: 'init' });
 
     const setupCamera = async () => {
@@ -104,7 +143,10 @@ export default function VerificationStep({ onVerified, isSubmitting, onBack }: V
         const stream = await navigator.mediaDevices.getUserMedia({ video: VIDEO_CONSTRAINTS });
         if (videoRef.current) {
           videoRef.current.srcObject = stream;
-          videoRef.current.onloadedmetadata = () => setCameraStatus("ready");
+          videoRef.current.onloadedmetadata = () => {
+              videoRef.current?.play();
+              setCameraStatus("ready");
+          }
         }
       } catch (err) {
         console.error("Camera setup failed:", err);
@@ -112,58 +154,32 @@ export default function VerificationStep({ onVerified, isSubmitting, onBack }: V
       }
     };
     setupCamera();
+    
+    requestRef.current = requestAnimationFrame(continuousPredictionLoop);
 
-    requestRef.current = requestAnimationFrame(predictWebcam);
+    return () => { 
+        if (requestRef.current) cancelAnimationFrame(requestRef.current);
+        workerRef.current?.terminate();
+        if (videoRef.current && videoRef.current.srcObject) {
+            (videoRef.current.srcObject as MediaStream).getTracks().forEach(track => track.stop());
+        }
+     };
+  }, [continuousPredictionLoop]);
 
-    return () => {
-      if (requestRef.current) cancelAnimationFrame(requestRef.current);
-      workerRef.current?.terminate();
-      if (videoRef.current && videoRef.current.srcObject) {
-        (videoRef.current.srcObject as MediaStream).getTracks().forEach(track => track.stop());
-      }
-    };
-  }, [predictWebcam]);
-
-
-  const handleCapture = useCallback(() => {
-    playSound('capture');
-    if (videoRef.current && canvasRef.current) {
-      const video = videoRef.current;
-      const canvas = canvasRef.current;
-      const targetWidth = 480;
-      const scale = targetWidth / video.videoWidth;
-      canvas.width = targetWidth;
-      canvas.height = video.videoHeight * scale;
-
-      const context = canvas.getContext("2d");
-      if (context) {
-        context.translate(canvas.width, 0);
-        context.scale(-1, 1);
-        context.drawImage(video, 0, 0, canvas.width, canvas.height);
-        context.setTransform(1, 0, 0, 1, 0, 0);
-
-        const dataUrl = canvas.toDataURL("image/jpeg", 0.8);
-        onVerified(dataUrl);
-      } else {
-        onVerified(null);
-      }
-    } else {
-      onVerified(null);
-    }
-  }, [onVerified]);
+  const isButtonDisabled = cameraStatus !== 'ready' || detectorStatus !== 'ready' || isSubmitting || isVerifying;
   
   const renderOverlay = () => {
     const commonClasses = "absolute inset-0 flex flex-col items-center justify-center gap-2 text-center p-4 rounded-lg";
-    if (isSubmitting) {
+    if (isSubmitting || isVerifying) {
          return (
              <div className={`${commonClasses} bg-background/80 backdrop-blur-sm`}>
                  <Loader2 className="h-8 w-8 animate-spin text-primary"/>
-                 <p className="text-muted-foreground">Submitting...</p>
+                 <p className="text-muted-foreground">{isVerifying ? 'Verifying...' : 'Submitting...'}</p>
              </div>
          );
     }
     
-    if (cameraStatus !== 'ready' || detectorStatus !== 'ready') {
+    if (cameraStatus !== 'ready' || detectorStatus === 'loading') {
         const message = cameraStatus !== 'ready' 
             ? 'Initializing Camera...' 
             : 'Loading AI Model...';
@@ -176,12 +192,14 @@ export default function VerificationStep({ onVerified, isSubmitting, onBack }: V
         );
     }
     
-    if (cameraStatus === 'error') {
+    if (cameraStatus === 'error' || detectorStatus === 'failed') {
+        const title = detectorStatus === 'failed' ? 'AI Model Failed' : 'Camera Error';
+        const description = detectorStatus === 'failed' ? 'The proxy detection model could not be loaded.' : 'Could not start camera. Please check device permissions and try again.';
         return (
           <Alert variant="destructive" className={`${commonClasses} bg-destructive/90 text-destructive-foreground`}>
               <AlertTriangle className="h-10 w-10" />
-              <AlertTitle>Camera Error</AlertTitle>
-              <AlertDescription>Could not start camera. Please check device permissions and try again.</AlertDescription>
+              <AlertTitle>{title}</AlertTitle>
+              <AlertDescription>{description}</AlertDescription>
           </Alert>
         );
     }
@@ -189,15 +207,22 @@ export default function VerificationStep({ onVerified, isSubmitting, onBack }: V
     return null;
   }
 
-  const isButtonDisabled = cameraStatus !== 'ready' || detectorStatus !== 'ready' || isSubmitting || isProxyDetected;
-
   return (
     <>
       <CardHeader>
         <CardTitle className="text-3xl font-bold">Take a Snapshot</CardTitle>
-        <CardDescription>Position yourself in the frame and take a picture.</CardDescription>
+        <CardDescription>Position yourself in the frame. The final image will be verified.</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
+        {isProxyDetected && !isVerifying && (
+            <Alert variant="destructive">
+              <AlertTriangle className="h-4 w-4" />
+              <AlertTitle>Potential Issue Detected</AlertTitle>
+              <AlertDescription>
+                Please ensure no other screens are visible. The final snapshot will be verified.
+              </AlertDescription>
+            </Alert>
+        )}
         <div className="relative aspect-video w-full overflow-hidden rounded-lg border-2 border-dashed bg-muted">
             <video
                 ref={videoRef}
@@ -209,26 +234,20 @@ export default function VerificationStep({ onVerified, isSubmitting, onBack }: V
             <canvas ref={canvasRef} className="hidden" />
             {renderOverlay()}
         </div>
-        {isProxyDetected && (
-            <Alert variant="destructive">
-                <AlertTriangle className="h-4 w-4" />
-                <AlertTitle>Proxy Detected</AlertTitle>
-                <AlertDescription>
-                   A phone was detected in the video feed. Please remove it to continue.
-                </AlertDescription>
-            </Alert>
-        )}
         <Button 
             onClick={handleCapture} 
             disabled={isButtonDisabled}
             className="w-full py-6 text-lg font-semibold transition-all hover:scale-105 active:scale-100"
         >
-            <Camera className="mr-2"/>
-            Take Snapshot & Submit
+            {isVerifying ? (
+                <><Loader2 className="mr-2 animate-spin" /> Verifying...</>
+            ) : (
+                <><Camera className="mr-2" /> Take Snapshot & Submit</>
+            )}
         </Button>
       </CardContent>
       <CardFooter>
-        <Button variant="link" onClick={() => { playSound('click'); onBack(); }} disabled={isSubmitting}>
+        <Button variant="link" onClick={() => { playSound('click'); onBack(); }} disabled={isSubmitting || isVerifying}>
              <ArrowLeft className="mr-2" />
              Go Back
         </Button>
