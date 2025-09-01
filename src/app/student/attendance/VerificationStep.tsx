@@ -115,12 +115,10 @@ export default function VerificationStep({ onVerified, isSubmitting, onBack }: V
 
   // Effect for setup and message handling
   useEffect(() => {
-    console.log("Component: Creating worker...");
     workerRef.current = new Worker('/detection.worker.js');
     
     // This handler now routes results based on context
     workerRef.current.onmessage = (event) => {
-      console.log("Component: Received message from worker:", event.data);
       const { type, isProxyDetected, error } = event.data;
       if (type === 'ready') setDetectorStatus("ready");
        else if (type === 'error') {
@@ -139,7 +137,6 @@ export default function VerificationStep({ onVerified, isSubmitting, onBack }: V
       }
     };
     
-    console.log("Component: Sending 'init' message to worker.");
     workerRef.current.postMessage({ type: 'init' });
 
     const setupCamera = async () => {
