@@ -149,10 +149,9 @@ export default function AttendancePage() {
 
   useEffect(() => {
     const isCameraStep = step === 2 || (step === 3 && !snapshot);
+    
     if (isCameraStep) {
-        if (hasCameraPermission === null || (hasCameraPermission === false && !virtualCameraDetected)) {
-            getCameraPermission();
-        }
+        getCameraPermission();
     }
 
     return () => {
@@ -161,7 +160,7 @@ export default function AttendancePage() {
         stream.getTracks().forEach(track => track.stop());
       }
     };
-  }, [step, snapshot, getCameraPermission, hasCameraPermission, virtualCameraDetected]);
+  }, [step, snapshot, getCameraPermission]);
 
 
   const handleCapture = useCallback(() => {
@@ -326,13 +325,14 @@ export default function AttendancePage() {
                 <VideoOff className="h-10 w-10" />
                 <AlertTitle>Camera Access Denied</AlertTitle>
                 <AlertDescription>Please allow camera access in your browser settings and ensure a physical webcam is connected.</AlertDescription>
+                <Button onClick={() => getCameraPermission(true)}><RefreshCw className="mr-2"/>Try Again</Button>
             </Alert>
         )}
         
          {hasCameraPermission === null && !snapshot && (
-            <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 p-4 text-center">
-                <p className="text-muted-foreground">The app needs camera access to take a snapshot.</p>
-                <Button onClick={() => getCameraPermission(true)}><Camera className="mr-2"/>Enable Camera</Button>
+            <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 p-4 text-center">
+                <Loader2 className="h-8 w-8 animate-spin text-muted-foreground"/>
+                <p className="text-muted-foreground">Requesting camera access...</p>
             </div>
         )}
 
