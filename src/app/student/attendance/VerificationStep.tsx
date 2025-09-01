@@ -76,7 +76,8 @@ export default function VerificationStep({ onVerified, isSubmitting, onBack }: V
         const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' } });
         if (videoRef.current) {
             videoRef.current.srcObject = stream;
-            // The 'onloadedmetadata' event listener is more reliable
+            // The 'onloadedmetadata' event listener is the most reliable way 
+            // to play the video after the stream is ready.
             videoRef.current.onloadedmetadata = () => {
                 videoRef.current?.play().then(() => {
                     setStatus("ready");

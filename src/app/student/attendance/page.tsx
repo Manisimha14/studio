@@ -38,7 +38,7 @@ import { playSound } from "@/lib/utils";
 const VerificationStep = lazy(() => import('./VerificationStep'));
 
 // Simple UUID generator
-const getDeviceId = () => {
+const generateDeviceId = () => {
   if (typeof window === 'undefined') return '';
   let deviceId = localStorage.getItem('device-id');
   if (!deviceId) {
@@ -64,8 +64,8 @@ export default function AttendancePage() {
   const [deviceId, setDeviceId] = useState('');
 
   useEffect(() => {
-    // This hook runs only on the client, after hydration
-    setDeviceId(getDeviceId());
+    // This hook runs only on the client, after hydration, which prevents hydration errors.
+    setDeviceId(generateDeviceId());
   }, []);
 
   const handleProceedToVerification = () => {
