@@ -1,5 +1,5 @@
 
-// src/app/student/attendance/VerificationStep.tsx
+"use client";
 
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { Button } from "@/components/ui/button";
@@ -59,44 +59,68 @@ export default function VerificationStep({ onVerified, isSubmitting, onBack }: V
     }
   }, []);
 
+  // Enhanced camera initialization with better mobile support
   const initCamera = useCallback(async () => {
     try {
       const constraints: MediaStreamConstraints = {
         video: {
-          width: { ideal: 640, min: 320 },
-          height: { ideal: 480, min: 240 },
-          frameRate: { ideal: 15, max: 30 },
+          width: { ideal: 640 },
+          height: { ideal: 480 },
+          frameRate: { ideal: 15 },
           facingMode: 'user',
         },
         audio: false
       };
       
       const stream = await navigator.mediaDevices.getUserMedia(constraints);
-      streamRef.current = stream;
+      const video = videoRef.current;
 
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
+      if (video) {
+        streamRef.current = stream;
+
+        // FIX 1: Directly set crucial properties for autoplay reliability
+        video.muted = true;
+        video.playsInline = true;
+        
+        // FIX 2: Use a Promise to wait for the 'canplay' event
         await new Promise<void>((resolve, reject) => {
           const timeout = setTimeout(() => reject(new Error('Camera loading timeout')), 10000);
-          videoRef.current!.onloadedmetadata = () => {
+
+          // FIX 3: Use 'oncanplay' as it's a more reliable indicator for playback readiness
+          video.oncanplay = () => {
             clearTimeout(timeout);
-            videoRef.current?.play().then(() => {
-              setCameraReady(true);
-              resolve();
-            }).catch(reject);
+            video.play()
+              .then(() => {
+                setCameraReady(true);
+                resolve();
+              })
+              .catch(err => {
+                console.error("Video play() failed:", err);
+                reject(err);
+              });
           };
+
+          video.onerror = () => {
+             clearTimeout(timeout);
+             reject(new Error('Video element encountered an error'));
+          };
+          
+          // Attach the stream *after* setting up listeners
+          video.srcObject = stream;
         });
       }
     } catch (err: any) {
+      console.error('📸 Camera initialization failed:', err);
       const errorMessage = err.name === 'NotAllowedError' 
         ? 'Camera permission denied. Please allow camera access and refresh.'
         : err.name === 'NotFoundError'
-        ? 'No camera found on this device.'
+        ? 'No camera found. Please ensure your device has a camera.'
         : `Camera error: ${err.message}`;
       setError(errorMessage);
-      throw new Error(errorMessage);
+      throw err;
     }
   }, []);
+
 
   const initDetector = useCallback(async () => {
     try {
