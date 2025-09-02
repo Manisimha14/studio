@@ -25,7 +25,7 @@ import {
 import { playSound } from "@/lib/utils";
 
 interface VerificationStepProps {
-    onVerified: (snapshot: string | null) => Promise<void>;
+    onVerified: (snapshot: string, proxyDetected: boolean) => Promise<void>;
     isSubmitting: boolean;
     onBack: () => void;
 }
@@ -192,6 +192,7 @@ export default function VerificationStep({ onVerified, isSubmitting, onBack }: V
       }
 
       const dataUrl = canvas.toDataURL("image/jpeg", 0.8);
+      let isPhoneDetectedInFinalCheck = false;
 
       // Quick final check if detector is available
       if (workerRef.current && detectorReady) {
@@ -206,7 +207,7 @@ export default function VerificationStep({ onVerified, isSubmitting, onBack }: V
           
           workerRef.current.postMessage({ type: 'detect', imageData });
 
-          const isPhoneDetected = await new Promise<boolean>((resolve) => {
+          isPhoneDetectedInFinalCheck = await new Promise<boolean>((resolve) => {
             finalCheckResolver.current = resolve;
             setTimeout(() => {
               if (finalCheckResolver.current === resolve) {
@@ -215,18 +216,11 @@ export default function VerificationStep({ onVerified, isSubmitting, onBack }: V
               }
             }, 2000); // Quick timeout
           });
-
-          if (isPhoneDetected) {
-            playSound?.('error');
-            setIsProxyDetected(true); // Show the warning
-            setIsVerifying(false);
-            return; // Stop the submission
-          }
         }
       }
 
-      // If checks pass, call the onVerified prop to submit the attendance
-      await onVerified(dataUrl);
+      // Always submit, but pass the flag
+      await onVerified(dataUrl, isPhoneDetectedInFinalCheck);
       
     } catch (error) {
       console.error("Capture failed:", error);
@@ -409,5 +403,3 @@ export default function VerificationStep({ onVerified, isSubmitting, onBack }: V
     </>
   );
 }
-
-  

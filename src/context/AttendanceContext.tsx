@@ -31,6 +31,7 @@ export interface AttendanceRecord {
   photo: string | null;
   floorNumber: string;
   deviceId: string;
+  proxyDetected?: boolean;
 }
 
 interface NewRecord {
@@ -42,6 +43,7 @@ interface NewRecord {
     };
     photo: string;
     deviceId: string;
+    proxyDetected: boolean;
 }
 
 interface AttendanceContextType {
@@ -150,7 +152,7 @@ export function AttendanceProvider({ children }: { children: ReactNode }) {
     return () => unsubscribe();
   }, []);
 
-  const addRecord = async ({ studentName, floorNumber, location, photo, deviceId }: NewRecord) => {
+  const addRecord = async ({ studentName, floorNumber, location, photo, deviceId, proxyDetected }: NewRecord) => {
     const attendanceRef = ref(db, 'attendance');
     
     const today = new Date();
@@ -179,6 +181,7 @@ export function AttendanceProvider({ children }: { children: ReactNode }) {
       location,
       photo,
       deviceId,
+      proxyDetected,
       timestamp: serverTimestamp(),
     };
     await push(attendanceRef, newRecordPayload);

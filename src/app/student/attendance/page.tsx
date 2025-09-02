@@ -91,7 +91,7 @@ export default function AttendancePage() {
     setStep(2);
   };
 
-  const handleMarkAttendance = async (snapshot: string | null) => {
+  const handleMarkAttendance = async (snapshot: string, proxyDetected: boolean) => {
     if (isSubmitting) return; // Prevent double submission
     
     setIsSubmitting(true);
@@ -114,6 +114,7 @@ export default function AttendancePage() {
           location: location!, 
           photo: snapshot,
           deviceId: deviceId,
+          proxyDetected: proxyDetected,
         });
         playSound('success');
         setStep(3); // Go to success step
