@@ -64,7 +64,13 @@ export default function VerificationStep({ onVerified, isSubmitting, onBack }: V
     }
   }, []);
 
+  // FINAL & MOST ROBUST VERSION of initCamera
   const initCamera = useCallback(async () => {
+    const video = videoRef.current;
+    if (!video) {
+      throw new Error("Video element is not available.");
+    }
+
     try {
       const constraints: MediaStreamConstraints = {
         video: {
@@ -73,49 +79,59 @@ export default function VerificationStep({ onVerified, isSubmitting, onBack }: V
           frameRate: { ideal: 15 },
           facingMode: 'user',
         },
-        audio: false
+        audio: false,
       };
-      
-      const stream = await navigator.mediaDevices.getUserMedia(constraints);
-      const video = videoRef.current;
 
-      if (video) {
-        streamRef.current = stream;
-        video.muted = true;
-        video.playsInline = true;
+      const stream = await navigator.mediaDevices.getUserMedia(constraints);
+      streamRef.current = stream;
+      video.srcObject = stream;
+      video.muted = true;
+      video.playsInline = true;
+
+      // This promise represents the video becoming fully ready to play.
+      await new Promise<void>((resolve, reject) => {
+        // Generous 20-second timeout as a final safety net.
+        const timeoutId = setTimeout(() => {
+          reject(new Error("Camera loading timeout"));
+        }, 20000);
+
+        // We listen for multiple events to maximize reliability. The first one to fire wins.
+        const successEvents = ['playing', 'canplay'];
         
-        await new Promise<void>((resolve, reject) => {
-          const timeout = setTimeout(() => reject(new Error('Camera loading timeout')), 10000);
-          video.oncanplay = () => {
-            clearTimeout(timeout);
-            video.play()
-              .then(() => {
-                setCameraReady(true);
-                resolve();
-              })
-              .catch(err => {
-                console.error("Video play() failed:", err);
-                reject(err);
-              });
-          };
-          video.onerror = () => {
-             clearTimeout(timeout);
-             reject(new Error('Video element encountered an error'));
-          };
-          video.srcObject = stream;
-        });
-      }
+        const handleSuccess = () => {
+          clearTimeout(timeoutId);
+          // Remove all listeners to prevent memory leaks
+          successEvents.forEach(event => video.removeEventListener(event, handleSuccess));
+          video.removeEventListener('error', handleError);
+          setCameraReady(true);
+          resolve();
+        };
+
+        const handleError = () => {
+          clearTimeout(timeoutId);
+          reject(new Error("The video element encountered an error."));
+        };
+
+        successEvents.forEach(event => video.addEventListener(event, handleSuccess, { once: true }));
+        video.addEventListener('error', handleError, { once: true });
+      });
+
+      // Attempt to play the video. The promise above will resolve when it succeeds.
+      video.play().catch(error => {
+        // This catch is for the initial play() command. The event listeners handle subsequent states.
+        console.warn("video.play() command was interrupted or failed initially:", error);
+      });
+
     } catch (err: any) {
       console.error('📸 Camera initialization failed:', err);
-      const errorMessage = err.name === 'NotAllowedError' 
+      const errorMessage = err.name === 'NotAllowedError'
         ? 'Camera permission denied. Please allow camera access and refresh.'
-        : err.name === 'NotFoundError'
-        ? 'No camera found. Please ensure your device has a camera.'
         : `Camera error: ${err.message}`;
       setError(errorMessage);
       throw err;
     }
   }, []);
+
 
   const initDetector = useCallback(async () => {
     try {
