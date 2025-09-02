@@ -218,6 +218,7 @@ export default function VerificationStep({ onVerified, isSubmitting, onBack }: V
 
           if (isPhoneDetected) {
             playSound?.('error');
+            setIsProxyDetected(true);
             setIsVerifying(false);
             return;
           }
@@ -366,6 +367,11 @@ export default function VerificationStep({ onVerified, isSubmitting, onBack }: V
             <>
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
               Verifying...
+            </>
+          ) : isSubmitting ? (
+             <>
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              Submitting...
             </>
           ) : !isReady ? (
             <>
