@@ -1,3 +1,4 @@
+
 // src/app/student/attendance/VerificationStep.tsx
 
 import { useEffect, useRef, useState, useCallback } from 'react';
