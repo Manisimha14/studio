@@ -32,7 +32,6 @@ interface VerificationStepProps {
 }
 
 // --- Final Optimization Configuration ---
-// The continuous scan can be even less frequent now.
 const CONTINUOUS_DETECTION_INTERVAL_MS = 1500; 
 const VIDEO_CONSTRAINTS = {
   width: { ideal: 640 },
@@ -51,8 +50,6 @@ export default function VerificationStep({ onVerified, isSubmitting, onBack }: V
   const workerRef = useRef<Worker | null>(null);
   const requestRef = useRef<number>();
   const lastCheckTime = useRef(0);
-
-  // A ref to hold a Promise resolver for the one-time check
   const finalCheckResolver = useRef<((value: boolean) => void) | null>(null);
 
   // This is now the main capture and verification logic
@@ -62,7 +59,6 @@ export default function VerificationStep({ onVerified, isSubmitting, onBack }: V
 
     setIsVerifying(true);
 
-    // 1. Draw current video frame to main canvas for high-quality snapshot
     const video = videoRef.current;
     const canvas = canvasRef.current;
     const targetWidth = 480;
@@ -81,7 +77,6 @@ export default function VerificationStep({ onVerified, isSubmitting, onBack }: V
     
     const dataUrl = canvas.toDataURL("image/jpeg", 0.8);
     
-    // 2. Perform a final, high-confidence check
     const imageBitmap = await createImageBitmap(video);
     workerRef.current.postMessage({ type: 'detect', frame: imageBitmap }, [imageBitmap]);
 
@@ -89,10 +84,8 @@ export default function VerificationStep({ onVerified, isSubmitting, onBack }: V
       finalCheckResolver.current = resolve;
     });
 
-    // 3. Submit or reject based on the final check
     if (isProxyInFinalCheck) {
       playSound('error');
-      // You could show a more specific error toast/message here
       console.error("Submission failed: A phone was detected in the final snapshot.");
       setIsVerifying(false);
     } else {
@@ -100,7 +93,7 @@ export default function VerificationStep({ onVerified, isSubmitting, onBack }: V
     }
   };
 
-  // The continuous loop is now only for the UI warning
+  // The continuous loop for UI warning
   const continuousPredictionLoop = useCallback(async () => {
     if (cameraStatus === "ready" && detectorStatus === "ready" && workerRef.current && videoRef.current && videoRef.current.readyState >= 3) {
       const now = performance.now();
@@ -117,21 +110,17 @@ export default function VerificationStep({ onVerified, isSubmitting, onBack }: V
   useEffect(() => {
     workerRef.current = new Worker('/detection.worker.js');
     
-    // This handler now routes results based on context
     workerRef.current.onmessage = (event) => {
       const { type, isProxyDetected, error } = event.data;
       if (type === 'ready') setDetectorStatus("ready");
-       else if (type === 'error') {
+      else if (type === 'error') {
         console.error("Worker initialization failed:", error);
         setDetectorStatus("failed");
-      }
-      else if (type === 'result') {
-        // If finalCheckResolver is active, this result is for the final check
+      } else if (type === 'result') {
         if (finalCheckResolver.current) {
           finalCheckResolver.current(isProxyDetected);
-          finalCheckResolver.current = null; // Reset after use
+          finalCheckResolver.current = null;
         } else {
-          // Otherwise, it's for the continuous UI warning
           setIsProxyDetected(isProxyDetected);
         }
       }
@@ -144,10 +133,11 @@ export default function VerificationStep({ onVerified, isSubmitting, onBack }: V
         const stream = await navigator.mediaDevices.getUserMedia({ video: VIDEO_CONSTRAINTS });
         if (videoRef.current) {
           videoRef.current.srcObject = stream;
-          videoRef.current.onloadedmetadata = () => {
-              videoRef.current?.play();
-              setCameraStatus("ready");
-          }
+          // **FIX 1: Use oncanplay for reliable ready state**
+          videoRef.current.oncanplay = () => {
+            videoRef.current?.play();
+            setCameraStatus("ready");
+          };
         }
       } catch (err) {
         console.error("Camera setup failed:", err);
@@ -168,7 +158,7 @@ export default function VerificationStep({ onVerified, isSubmitting, onBack }: V
   }, [continuousPredictionLoop]);
 
   const isButtonDisabled = cameraStatus !== 'ready' || detectorStatus !== 'ready' || isSubmitting || isVerifying;
-  
+ 
   const renderOverlay = () => {
     const commonClasses = "absolute inset-0 flex flex-col items-center justify-center gap-2 text-center p-4 rounded-lg";
     if (isSubmitting || isVerifying) {
@@ -180,7 +170,8 @@ export default function VerificationStep({ onVerified, isSubmitting, onBack }: V
          );
     }
     
-    if (cameraStatus !== 'ready' || detectorStatus === 'loading') {
+    // **FIX 2: Improved loading messages**
+    if (cameraStatus !== 'ready' || (cameraStatus === 'ready' && detectorStatus === 'loading')) {
         const message = cameraStatus !== 'ready' 
             ? 'Initializing Camera...' 
             : 'Loading AI Model...';
