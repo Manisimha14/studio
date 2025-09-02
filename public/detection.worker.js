@@ -1,64 +1,61 @@
 
-// detection.worker.js // Lightweight Heuristic Phone Detector
+// public/detection.worker.js
 
-self.onmessage = (event) => {
-  const { type, imageData } = event.data;
+importScripts("https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@3.11.0/dist/tf.min.js");
+importScripts("https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd@2.2.2/dist/coco-ssd.min.js");
+
+let model = null;
+let isDetecting = false; // OPTIMIZATION: Flag to prevent detection backlog.
+
+async function loadModel() {
+  if (model) return;
+
+  // OPTIMIZATION: Set the backend to WebGL for GPU acceleration.
+  await tf.setBackend('webgl');
+  
+  // OPTIMIZATION: Load the 'lite_mobilenet_v2' model, which is smaller and faster.
+  model = await cocoSsd.load({ base: 'lite_mobilenet_v2' });
+}
+
+self.onmessage = async (event) => {
+  const { type, imageData, frame } = event.data;
 
   if (type === 'init') {
-    self.postMessage({ type: 'ready' });
+    try {
+      await loadModel();
+      self.postMessage({ type: 'ready' });
+    } catch (error) {
+      self.postMessage({ type: 'error', error: "Failed to load AI model." });
+    }
     return;
   }
 
   if (type === 'detect') {
-    if (!imageData) {
-      self.postMessage({ type: 'result', isProxyDetected: false });
+    const pixels = imageData || frame;
+    // OPTIMIZATION: If the model is busy, skip this frame.
+    if (!model || !pixels || isDetecting) {
       return;
     }
+
+    isDetecting = true; // Lock detection
     try {
-      const isProxyDetected = hasDarkRectangle(imageData);
-      self.postMessage({ type: 'result', isProxyDetected });
+      // TensorFlow.js works with various pixel sources, including ImageData and ImageBitmap
+      const tensor = tf.browser.fromPixels(pixels);
+      const predictions = await model.detect(tensor);
+      tensor.dispose();
+
+      const isPhoneDetected = predictions.some(
+        (prediction) => prediction.class === 'cell phone' && prediction.score > 0.50
+      );
+      
+      self.postMessage({ type: 'result', isProxyDetected: isPhoneDetected });
+
     } catch (error) {
-      console.error('Heuristic detection failed:', error);
+      console.error('AI detection failed:', error);
+      // Fail safe in case of an error
       self.postMessage({ type: 'result', isProxyDetected: false });
+    } finally {
+      isDetecting = false; // Unlock detection for the next frame
     }
   }
 };
-
-/**
- * A highly optimized heuristic function to detect a potential phone screen.
- * It checks for a significant number of very dark pixels by sampling the image.
- *
- * @param {ImageData} imageData - The image data from a canvas.
- * @returns {boolean} - True if a dark rectangle (potential phone) is detected.
- */
-function hasDarkRectangle(imageData) {
-  const { data, width, height } = imageData;
-  
-  // Adjusted thresholds for better accuracy
-  const darkPixelThreshold = 20; 
-  const darkAreaThreshold = 0.25;
-
-  // OPTIMIZATION: Check 1 in every 8 pixels instead of all of them.
-  // This massively reduces computation with minimal impact on accuracy.
-  const PIXEL_SAMPLE_RATE = 8;
-  const PIXEL_STEP = 4 * PIXEL_SAMPLE_RATE;
-
-  let darkPixelCount = 0;
-
-  // Iterate through a sample of pixels
-  for (let i = 0; i < data.length; i += PIXEL_STEP) {
-    const r = data[i];
-    const g = data[i + 1];
-    const b = data[i + 2];
-
-    if (r < darkPixelThreshold && g < darkPixelThreshold && b < darkPixelThreshold) {
-      darkPixelCount++;
-    }
-  }
-
-  // Adjust total pixels to reflect the sample rate for the ratio calculation
-  const totalPixelsSampled = (width * height) / PIXEL_SAMPLE_RATE;
-  const darkAreaRatio = darkPixelCount / totalPixelsSampled;
-
-  return darkAreaRatio > darkAreaThreshold;
-}

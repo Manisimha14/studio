@@ -205,14 +205,13 @@ export default function VerificationStep({ onVerified, isSubmitting, onBack }: V
     }
   };
 
-  // Initialize everything
+  // Initialize everything in parallel for a faster user experience
   useEffect(() => {
     let active = true;
+
     const init = async () => {
-      await initCamera();
-      if(active && cameraReady) {
-        await initDetector();
-      }
+      // OPTIMIZATION: Start camera and detector loading at the same time.
+      await Promise.all([initCamera(), initDetector()]);
     };
     
     init();
@@ -227,7 +226,7 @@ export default function VerificationStep({ onVerified, isSubmitting, onBack }: V
         (videoRef.current.srcObject as MediaStream).getTracks().forEach(track => track.stop());
       }
     };
-  }, [initCamera, initDetector, cameraReady]);
+  }, [initCamera, initDetector]);
 
   // Start/Stop the detection interval
   useEffect(() => {
