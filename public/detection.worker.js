@@ -1,133 +1,147 @@
-// public/detection.worker.js - Industry-Grade Mobile Detection Worker
+// public/detection.worker.js - Production Grade
+// Implements CDN fallbacks, retry logic, and robust error handling.
 
-// Try to import scripts with error handling
-try {
-  importScripts("https://cdn.jsdelivr.net/npm/@tensorflow/tfjs/dist/tf.min.js");
-  importScripts("https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd/dist/coco-ssd.min.js");
-} catch (e) {
-  console.error("Failed to load TensorFlow.js scripts", e);
-  self.postMessage({ type: 'error', error: 'Could not load core AI libraries.' });
-}
+// --- Configuration ---
+const TF_VERSION = "4.20.0";
+const COCO_SSD_VERSION = "2.2.3";
+const MODEL_CONFIG = { base: 'lite_mobilenet_v2' };
+const DETECTION_THRESHOLD = 0.40; // Confidence threshold for detection
+const PROXY_CLASSES = ['cell phone', 'laptop', 'tablet', 'tv', 'remote', 'mouse', 'keyboard', 'book'];
 
-let model = null;
-let isDetecting = false;
-let frameCounter = 0;
-const FRAME_SKIP = 2; // Process 1 in every 3 frames
-
-const PROXY_DEVICES = {
-  'cell phone': 0.35,
-  'laptop': 0.4,
-  'tablet': 0.4, // Custom alias for detection
-  'tv': 0.5,
-  'remote': 0.3,
-  'mouse': 0.3,
-  'keyboard': 0.3
+const CDN_URLS = {
+  tfjs: [
+    `https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@${TF_VERSION}/dist/tf.min.js`,
+    `https://unpkg.com/@tensorflow/tfjs@${TF_VERSION}/dist/tf.min.js`
+  ],
+  cocoSsd: [
+    `https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd@${COCO_SSD_VERSION}/dist/coco-ssd.min.js`,
+    `https://unpkg.com/@tensorflow-models/coco-ssd@${COCO_SSD_VERSION}/dist/coco-ssd.min.js`
+  ]
 };
 
-async function loadModel() {
-  if (model) return { success: true, backend: tf.getBackend() };
+// --- State ---
+let model = null;
+let isDetecting = false;
 
-  const backends = ['webgl', 'cpu'];
-  for (const backend of backends) {
+// --- Core Functions ---
+
+/**
+ * Tries to import scripts from a list of URLs, falling back to the next on failure.
+ * @param {string[]} urls - Array of script URLs to try.
+ */
+async function importScriptsWithFallback(urls) {
+  for (const url of urls) {
     try {
-      await tf.setBackend(backend);
+      importScripts(url);
+      console.log(`Successfully loaded script from ${url}`);
+      return;
+    } catch (e) {
+      console.warn(`Failed to load script from ${url}, trying next fallback...`);
+    }
+  }
+  throw new Error('Failed to load critical scripts from all CDN fallbacks.');
+}
+
+/**
+ * Loads the COCO-SSD model with retries and backend fallbacks.
+ */
+async function loadModelWithRetries(maxRetries = 3) {
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      if (model) return { backend: tf.getBackend() };
+
+      await importScriptsWithFallback(CDN_URLS.tfjs);
+      await importScriptsWithFallback(CDN_URLS.cocoSsd);
+
+      // 1. Try WebGL backend (GPU)
+      try {
+        await tf.setBackend('webgl');
+        await tf.ready();
+        model = await cocoSsd.load(MODEL_CONFIG);
+        console.log(`AI model loaded with WebGL backend (Attempt ${attempt})`);
+        return { backend: 'webgl' };
+      } catch (e) {
+        console.warn(`WebGL backend failed (Attempt ${attempt}):`, e.message);
+      }
+
+      // 2. Fallback to CPU backend
+      await tf.setBackend('cpu');
       await tf.ready();
-      
-      model = await cocoSsd.load({ base: 'lite_mobilenet_v2' });
-      
-      // Warm-up the model
-      const warmUpTensor = tf.zeros([224, 224, 3], 'int32');
-      await model.detect(warmUpTensor);
-      warmUpTensor.dispose();
-      
-      console.log(`🤖 AI Model loaded successfully with ${backend} backend.`);
-      return { success: true, backend };
+      model = await cocoSsd.load(MODEL_CONFIG);
+      console.log(`AI model loaded with CPU backend (Attempt ${attempt})`);
+      return { backend: 'cpu' };
 
     } catch (error) {
-      console.warn(`Failed to initialize with ${backend} backend:`, error.message);
+      console.error(`Model loading attempt ${attempt} failed:`, error);
+      if (attempt === maxRetries) {
+        throw new Error('All model loading attempts failed.');
+      }
+      // Wait before retrying
+      await new Promise(resolve => setTimeout(resolve, 2000));
+    }
+  }
+}
+
+
+// --- Worker Message Handler ---
+
+self.onmessage = async (event) => {
+  const { type, imageData } = event.data;
+
+  if (type === 'init') {
+    try {
+      const { backend } = await loadModelWithRetries();
+      self.postMessage({ type: 'ready', backend });
+    } catch (error) {
+      self.postMessage({ type: 'error', error: error.message, critical: true });
+    }
+    return;
+  }
+
+  if (type === 'detect') {
+    if (!model || !imageData || isDetecting) return;
+
+    isDetecting = true;
+    try {
+      const tensor = tf.browser.fromPixels(imageData);
+      const predictions = await model.detect(tensor);
+      tensor.dispose();
+
+      const detectedDevices = predictions.filter(p => 
+        PROXY_CLASSES.includes(p.class) && p.score > DETECTION_THRESHOLD
+      );
+
+      self.postMessage({
+        type: 'result',
+        isProxyDetected: detectedDevices.length > 0,
+        devices: detectedDevices.map(d => ({ type: d.class, confidence: d.score })),
+        deviceCount: detectedDevices.length,
+      });
+
+    } catch (error) {
+      console.error('AI detection failed:', error);
+      self.postMessage({ type: 'result', isProxyDetected: false }); // Fail safe
+    } finally {
+      isDetecting = false;
     }
   }
   
-  return { success: false, backend: null };
-}
-
-self.onmessage = async (event) => {
-  const { type, imageData, frameNumber } = event.data;
-
-  switch (type) {
-    case 'init':
-      try {
-        const { success, backend } = await loadModel();
-        if (success) {
-          const memory = tf.memory();
-          self.postMessage({ type: 'ready', backend, memory });
-        } else {
-          throw new Error('All backend initializations failed.');
-        }
-      } catch (error) {
-        self.postMessage({ type: 'error', error: "Failed to load AI model. Your browser might not be supported." });
-      }
-      break;
-
-    case 'detect':
-      frameCounter++;
-      if (!model || isDetecting || (frameCounter % (FRAME_SKIP + 1)) !== 0) {
-        return;
-      }
-
-      isDetecting = true;
-      let tensor = null;
-      try {
-        const detectionStartTime = performance.now();
-        
-        tensor = tf.browser.fromPixels(imageData);
-        
-        const predictions = await model.detect(tensor);
-        
-        const detectionTime = performance.now() - detectionStartTime;
-        if (detectionTime > 2000) {
-          console.warn(`Slow detection: ${detectionTime.toFixed(0)}ms`);
-        }
-
-        const detectedDevices = predictions
-          .map(p => ({
-            ...p,
-            type: p.class.toLowerCase().replace(' ', '')
-          }))
-          .filter(p => PROXY_DEVICES[p.class] && p.score >= PROXY_DEVICES[p.class])
-          .map(p => ({
-            type: p.class,
-            confidence: p.score,
-            area: p.bbox[2] * p.bbox[3]
-          }));
-
-        self.postMessage({
-          type: 'result',
-          isProxyDetected: detectedDevices.length > 0,
-          deviceCount: detectedDevices.length,
-          devices: detectedDevices,
-        });
-
-      } catch (error) {
-        console.error('AI detection failed:', error);
-        self.postMessage({ type: 'result', isProxyDetected: false, deviceCount: 0, devices: [] });
-      } finally {
-        if (tensor) tensor.dispose();
-        isDetecting = false;
-      }
-      break;
-
-    case 'cleanup':
-      if (model && model.dispose) {
-        model.dispose();
+  if (type === 'cleanup') {
+      if (model && typeof model.dispose === 'function') {
+          model.dispose();
       }
       model = null;
-      console.log("Worker cleaned up.");
-      break;
+      tf.disposeVariables();
+      console.log('Worker resources cleaned up.');
   }
 };
 
+// --- Global Error Handler ---
 self.onerror = (error) => {
   console.error('Unhandled worker error:', error);
-  self.postMessage({ type: 'error', error: 'A critical worker error occurred.' });
+  self.postMessage({
+    type: 'error',
+    error: 'A critical worker error occurred.',
+    critical: true
+  });
 };

@@ -63,11 +63,7 @@ export default function AttendancePage() {
   const [floorNumber, setFloorNumber] = useState("");
   const [deviceId, setDeviceId] = useState('');
   
-  // This state is needed for the new VerificationStep, which doesn't capture a photo itself
-  const [capturedSnapshot, setCapturedSnapshot] = useState<string | null>(null);
-
   useEffect(() => {
-    // This hook runs only on the client, after hydration, which prevents hydration errors.
     setDeviceId(generateDeviceId());
   }, []);
 
@@ -93,14 +89,15 @@ export default function AttendancePage() {
     }
     setStep(2);
   };
+  
+  const handleBackToForm = () => {
+    playSound('click');
+    setStep(1);
+  }
 
-  // This function is now called by the new VerificationStep upon successful verification
-  const handleVerificationComplete = async (success: boolean) => {
-    if (!success || isSubmitting) return;
+  const handleVerificationComplete = async (snapshot: string, proxyDetected: boolean) => {
+    if (isSubmitting) return;
 
-    // Because the new VerificationStep doesn't provide a snapshot,
-    // we would need to implement snapshot logic here if it were still required.
-    // For now, we will proceed without a photo to match the new component's API.
     setIsSubmitting(true);
     playSound('click');
 
@@ -109,28 +106,30 @@ export default function AttendancePage() {
           studentName: studentName.trim(), 
           floorNumber, 
           location: location!, 
-          photo: null, // No photo from new verification step
+          photo: snapshot,
           deviceId: deviceId,
-          proxyDetected: false, // The new step blocks submission if proxy is detected
+          proxyDetected: proxyDetected, 
         });
+        
         playSound('success');
         setStep(3); // Go to success step
         toast({
           title: "Success!",
-          description: "Thank you for marking the attendance.",
+          description: "Thank you for marking your attendance.",
         });
         setTimeout(() => router.push("/"), 3000);
 
-    } catch (error) {
+    } catch (error: any) {
         console.error("Error marking attendance:", error);
         playSound('error');
-        const errorMessage = (error as Error)?.message || "Could not mark attendance. Please try again.";
+        const errorMessage = error?.message || "Could not mark attendance. Please try again.";
         toast({
             variant: "destructive",
             title: "Submission Failed",
             description: errorMessage,
         });
         setIsSubmitting(false);
+        setStep(1); // Go back to form on error
     } 
   };
 
@@ -267,7 +266,9 @@ export default function AttendancePage() {
               </CardContent>
           }>
             <VerificationStep
-              onVerificationComplete={handleVerificationComplete}
+              onVerified={handleVerificationComplete}
+              isSubmitting={isSubmitting}
+              onBack={handleBackToForm}
             />
           </Suspense>
         )}
