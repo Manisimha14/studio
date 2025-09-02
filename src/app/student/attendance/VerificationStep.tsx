@@ -1,10 +1,6 @@
-
-"use client";
-
 import React, { useState, useRef, useEffect, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import {
-  Card,
   CardContent,
   CardFooter,
   CardHeader,
@@ -18,7 +14,6 @@ import {
 } from "@/components/ui/alert";
 import {
   Loader2,
-  VideoOff,
   AlertTriangle,
   RefreshCw,
   Camera,
@@ -32,299 +27,333 @@ interface VerificationStepProps {
     onBack: () => void;
 }
 
-// --- Final Optimization Configuration ---
-const CONTINUOUS_DETECTION_INTERVAL_MS = 1500;
+// Optimized configuration for speed
+const DETECTION_INTERVAL_MS = 2000; // Less frequent = better performance
 const VIDEO_CONSTRAINTS = {
-  width: { ideal: 640 },
-  height: { ideal: 480 },
-  facingMode: 'user'
+  width: { ideal: 480, max: 640 }, // Smaller resolution = faster processing
+  height: { ideal: 360, max: 480 },
+  facingMode: 'user',
+  frameRate: { ideal: 15, max: 30 } // Lower framerate = better performance
 };
 
 export default function VerificationStep({ onVerified, isSubmitting, onBack }: VerificationStepProps) {
-  const [cameraStatus, setCameraStatus] = useState<"initializing" | "ready" | "error">("initializing");
-  const [detectorStatus, setDetectorStatus] = useState<"loading" | "ready" | "failed">("loading");
+  const [status, setStatus] = useState<"camera" | "model" | "ready" | "error">("camera");
   const [isProxyDetected, setIsProxyDetected] = useState(false);
   const [isVerifying, setIsVerifying] = useState(false);
-  const [initializationStep, setInitializationStep] = useState<"camera" | "model" | "complete">("camera");
+  const [progress, setProgress] = useState(0);
+  const [errorMsg, setErrorMsg] = useState("");
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const workerRef = useRef<Worker | null>(null);
-  const requestRef = useRef<number>();
-  const lastCheckTime = useRef(0);
+  const animationRef = useRef<number>();
+  const lastDetectionTime = useRef(0);
   const finalCheckResolver = useRef<((value: boolean) => void) | null>(null);
 
-  const handleCapture = async () => {
-    playSound('capture');
-    if (!workerRef.current || !videoRef.current || !canvasRef.current) return;
+  const captureSnapshot = async () => {
+    if (!videoRef.current || !canvasRef.current || !workerRef.current) return;
 
+    playSound?.('capture');
     setIsVerifying(true);
 
     try {
-      // 1. Draw current video frame to main canvas for high-quality snapshot
       const video = videoRef.current;
       const canvas = canvasRef.current;
-      const targetWidth = 480;
-      const scale = targetWidth / video.videoWidth;
-      canvas.width = targetWidth;
-      canvas.height = video.videoHeight * scale;
+      
+      // Optimize canvas size for speed
+      const width = 320; // Smaller for faster processing
+      const height = (video.videoHeight / video.videoWidth) * width;
+      
+      canvas.width = width;
+      canvas.height = height;
 
-      const context = canvas.getContext("2d");
-      if (context) {
-          context.translate(canvas.width, 0);
-          context.scale(-1, 1);
-          context.drawImage(video, 0, 0, canvas.width, canvas.height);
-          context.setTransform(1, 0, 0, 1, 0, 0);
+      const ctx = canvas.getContext("2d", { alpha: false }); // Disable alpha for performance
+      if (ctx) {
+        ctx.translate(width, 0);
+        ctx.scale(-1, 1);
+        ctx.drawImage(video, 0, 0, width, height);
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
       }
-     
-      const dataUrl = canvas.toDataURL("image/jpeg", 0.8);
-     
-      // 2. Perform a final, high-confidence check
-      const imageBitmap = await createImageBitmap(video);
-      workerRef.current.postMessage({ type: 'detect', frame: imageBitmap }, [imageBitmap]);
 
-      const isProxyInFinalCheck = await new Promise<boolean>((resolve) => {
+      const dataUrl = canvas.toDataURL("image/jpeg", 0.7); // Lower quality for speed
+
+      // Final verification
+      const bitmap = await createImageBitmap(video, { resizeWidth: 224, resizeHeight: 224 }); // Smaller for detection
+      workerRef.current.postMessage({ type: 'detect', frame: bitmap }, [bitmap]);
+
+      const isPhoneDetected = await new Promise<boolean>((resolve) => {
         finalCheckResolver.current = resolve;
+        setTimeout(() => {
+          if (finalCheckResolver.current === resolve) {
+            finalCheckResolver.current = null;
+            resolve(false); // Timeout fallback
+          }
+        }, 3000);
       });
 
-      // 3. Submit or reject based on the final check
-      if (isProxyInFinalCheck) {
-        playSound('error');
-        console.error("Submission failed: A phone was detected in the final snapshot.");
+      if (isPhoneDetected) {
+        playSound?.('error');
         setIsVerifying(false);
-      } else {
-        await onVerified(dataUrl);
+        return;
       }
+
+      await onVerified(dataUrl);
     } catch (error) {
       console.error("Capture failed:", error);
       setIsVerifying(false);
     }
   };
 
-  const continuousPredictionLoop = useCallback(async () => {
-    if (cameraStatus === "ready" && detectorStatus === "ready" && workerRef.current && videoRef.current && videoRef.current.readyState >= 3) {
+  const runDetection = useCallback(async () => {
+    if (status === "ready" && videoRef.current?.readyState >= 3 && workerRef.current) {
       const now = performance.now();
-      if (now - lastCheckTime.current > CONTINUOUS_DETECTION_INTERVAL_MS) {
-        lastCheckTime.current = now;
+      if (now - lastDetectionTime.current > DETECTION_INTERVAL_MS) {
+        lastDetectionTime.current = now;
+        
         try {
-          const imageBitmap = await createImageBitmap(videoRef.current);
-          workerRef.current.postMessage({ type: 'detect', frame: imageBitmap }, [imageBitmap]);
+          // Use smaller bitmap for continuous detection
+          const bitmap = await createImageBitmap(videoRef.current, { 
+            resizeWidth: 224, 
+            resizeHeight: 224 
+          });
+          workerRef.current.postMessage({ type: 'detect', frame: bitmap }, [bitmap]);
         } catch (error) {
-          console.error("Continuous detection failed:", error);
+          console.error("Detection failed:", error);
         }
       }
     }
-    requestRef.current = requestAnimationFrame(continuousPredictionLoop);
-  }, [cameraStatus, detectorStatus]);
+    animationRef.current = requestAnimationFrame(runDetection);
+  }, [status]);
 
-  // Sequential initialization
-  useEffect(() => {
-    const initializeSequentially = async () => {
-      try {
-        // Step 1: Initialize Camera
-        setInitializationStep("camera");
-        setCameraStatus("initializing");
+  const initializeSystem = useCallback(async () => {
+    try {
+      // Phase 1: Camera (fast)
+      setStatus("camera");
+      setProgress(10);
+      
+      const stream = await navigator.mediaDevices.getUserMedia({ video: VIDEO_CONSTRAINTS });
+      
+      if (!videoRef.current) return;
+      
+      videoRef.current.srcObject = stream;
+      
+      await new Promise<void>((resolve, reject) => {
+        const timeout = setTimeout(() => reject(new Error('Camera timeout')), 8000);
         
-        const stream = await navigator.mediaDevices.getUserMedia({ video: VIDEO_CONSTRAINTS });
-        
-        if (videoRef.current) {
-          videoRef.current.srcObject = stream;
-          
-          await new Promise<void>((resolve) => {
-            videoRef.current!.onloadedmetadata = () => {
-              videoRef.current?.play();
-              setCameraStatus("ready");
-              resolve();
-            };
-          });
-        }
+        videoRef.current!.addEventListener('loadedmetadata', () => {
+          clearTimeout(timeout);
+          videoRef.current!.play();
+          setProgress(40);
+          resolve();
+        }, { once: true });
+      });
 
-        // Step 2: Initialize AI Model
-        setInitializationStep("model");
-        setDetectorStatus("loading");
+      // Phase 2: AI Model (optimized)
+      setStatus("model");
+      setProgress(50);
 
-        // Create and initialize worker
-        workerRef.current = new Worker('/detection.worker.js');
+      workerRef.current = new Worker('/detection.worker.js');
+      
+      workerRef.current.onmessage = (event) => {
+        const { type, isProxyDetected, error } = event.data;
         
-        // Set up message handler
-        workerRef.current.onmessage = (event) => {
-          const { type, isProxyDetected, error } = event.data;
-          
-          if (type === 'ready') {
-            setDetectorStatus("ready");
-            setInitializationStep("complete");
-          } else if (type === 'error') {
-            console.error("Worker initialization failed:", error);
-            setDetectorStatus("failed");
-          } else if (type === 'result') {
-            if (finalCheckResolver.current) {
-              finalCheckResolver.current(isProxyDetected);
-              finalCheckResolver.current = null;
-            } else {
-              setIsProxyDetected(isProxyDetected);
-            }
+        if (type === 'ready') {
+          setProgress(100);
+          setStatus("ready");
+        } else if (type === 'error') {
+          setErrorMsg(error);
+          setStatus("error");
+        } else if (type === 'result') {
+          if (finalCheckResolver.current) {
+            finalCheckResolver.current(isProxyDetected);
+            finalCheckResolver.current = null;
+          } else {
+            setIsProxyDetected(isProxyDetected);
           }
-        };
+        }
+      };
 
-        // Initialize the worker
-        workerRef.current.postMessage({ type: 'init' });
+      workerRef.current.onerror = () => {
+        setErrorMsg("Worker script failed to load");
+        setStatus("error");
+      };
 
-      } catch (error) {
-        console.error("Initialization failed:", error);
-        setCameraStatus("error");
-        setDetectorStatus("failed");
-      }
-    };
+      // Progress simulation during model loading
+      const progressInterval = setInterval(() => {
+        setProgress(prev => prev < 90 ? prev + 5 : prev);
+      }, 500);
 
-    initializeSequentially();
+      setTimeout(() => clearInterval(progressInterval), 8000);
 
+      workerRef.current.postMessage({ type: 'init' });
+
+      // Fallback timeout
+      setTimeout(() => {
+        if (status !== "ready" && status !== "error") {
+          setErrorMsg("Initialization timeout - please try again");
+          setStatus("error");
+        }
+      }, 15000);
+
+    } catch (error: any) {
+      console.error("Initialization failed:", error);
+      setErrorMsg(error.message);
+      setStatus("error");
+    }
+  }, [status]);
+
+  // Initialize on mount
+  useEffect(() => {
+    initializeSystem();
+    
     return () => {
-      if (requestRef.current) cancelAnimationFrame(requestRef.current);
+      if (animationRef.current) cancelAnimationFrame(animationRef.current);
       if (workerRef.current) {
         workerRef.current.terminate();
         workerRef.current = null;
       }
-      if (videoRef.current && videoRef.current.srcObject) {
+      if (videoRef.current?.srcObject) {
         (videoRef.current.srcObject as MediaStream).getTracks().forEach(track => track.stop());
       }
     };
-  }, []);
+  }, [initializeSystem]);
 
-  // Start continuous detection once everything is ready
+  // Start detection loop when ready
   useEffect(() => {
-    if (cameraStatus === "ready" && detectorStatus === "ready") {
-      requestRef.current = requestAnimationFrame(continuousPredictionLoop);
+    if (status === "ready") {
+      animationRef.current = requestAnimationFrame(runDetection);
     }
-    
     return () => {
-      if (requestRef.current) cancelAnimationFrame(requestRef.current);
+      if (animationRef.current) cancelAnimationFrame(animationRef.current);
     };
-  }, [cameraStatus, detectorStatus, continuousPredictionLoop]);
+  }, [status, runDetection]);
 
-  const isButtonDisabled = cameraStatus !== 'ready' || detectorStatus !== 'ready' || isSubmitting || isVerifying;
- 
-  const renderOverlay = () => {
-    const commonClasses = "absolute inset-0 flex flex-col items-center justify-center gap-2 text-center p-4 rounded-lg";
-    
-    if (isSubmitting || isVerifying) {
-      return (
-        <div className={`${commonClasses} bg-background/80 backdrop-blur-sm`}>
-          <Loader2 className="h-8 w-8 animate-spin text-primary"/>
-          <p className="text-muted-foreground">{isVerifying ? 'Verifying...' : 'Submitting...'}</p>
-        </div>
-      );
-    }
-   
-    if (initializationStep === "camera" && cameraStatus !== 'ready') {
-      return (
-        <div className={`${commonClasses} bg-background/80`}>
-          <Loader2 className="h-8 w-8 animate-spin text-primary"/>
-          <p className="text-muted-foreground animate-pulse">Initializing Camera...</p>
-        </div>
-      );
-    }
+  const retry = () => {
+    setStatus("camera");
+    setProgress(0);
+    setErrorMsg("");
+    setIsProxyDetected(false);
+    initializeSystem();
+  };
 
-    if (initializationStep === "model" && detectorStatus === 'loading') {
+  const renderContent = () => {
+    if (status === "error") {
       return (
-        <div className={`${commonClasses} bg-background/80`}>
-          <Loader2 className="h-8 w-8 animate-spin text-primary"/>
-          <p className="text-muted-foreground animate-pulse">Loading AI Model...</p>
-          <p className="text-xs text-muted-foreground">This may take a moment...</p>
-        </div>
-      );
-    }
-   
-    if (cameraStatus === 'error' || detectorStatus === 'failed') {
-      const title = detectorStatus === 'failed' ? 'AI Model Failed' : 'Camera Error';
-      const description = detectorStatus === 'failed' 
-        ? 'The detection model could not be loaded. Please refresh and try again.' 
-        : 'Could not access camera. Please check permissions and try again.';
-        
-      return (
-        <div className={`${commonClasses} bg-destructive/90 text-destructive-foreground`}>
-          <AlertTriangle className="h-10 w-10" />
-          <div className="space-y-2">
-            <h3 className="font-semibold">{title}</h3>
-            <p className="text-sm">{description}</p>
-            <Button 
-              variant="outline" 
-              size="sm" 
-              onClick={() => window.location.reload()}
-              className="mt-2"
-            >
+        <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 bg-destructive/10 rounded-lg p-6">
+          <AlertTriangle className="h-12 w-12 text-destructive" />
+          <div className="text-center space-y-2">
+            <h3 className="font-semibold text-destructive">Loading Failed</h3>
+            <p className="text-sm text-muted-foreground">{errorMsg}</p>
+            <Button onClick={retry} size="sm" variant="outline">
               <RefreshCw className="h-4 w-4 mr-2" />
-              Refresh Page
+              Retry
             </Button>
           </div>
         </div>
       );
     }
-   
+
+    if (status !== "ready") {
+      const messages = {
+        camera: "Starting camera...",
+        model: "Loading AI model..."
+      };
+
+      return (
+        <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 bg-background/80 backdrop-blur-sm rounded-lg">
+          <div className="relative">
+            <Loader2 className="h-10 w-10 animate-spin text-primary" />
+            <div className="absolute -inset-2 rounded-full border-2 border-primary/20" style={{
+              animation: 'pulse 2s infinite'
+            }} />
+          </div>
+          <div className="text-center space-y-2">
+            <p className="font-medium">{messages[status] || "Initializing..."}</p>
+            <div className="w-48 h-1.5 bg-gray-200 rounded-full overflow-hidden">
+              <div 
+                className="h-full bg-primary transition-all duration-300 rounded-full"
+                style={{ width: `${progress}%` }}
+              />
+            </div>
+            <p className="text-xs text-muted-foreground">{progress}%</p>
+          </div>
+        </div>
+      );
+    }
+
     return null;
   };
 
-  const getStatusMessage = () => {
-    if (initializationStep === "complete") return "Ready to capture";
-    if (initializationStep === "model") return "Loading AI detection model...";
-    if (initializationStep === "camera") return "Initializing camera...";
-    return "Preparing...";
-  };
+  const isReady = status === "ready";
+  const isDisabled = !isReady || isSubmitting || isVerifying;
 
   return (
     <>
       <CardHeader>
         <CardTitle className="text-3xl font-bold">Take a Snapshot</CardTitle>
         <CardDescription>
-          Position yourself in the frame. The final image will be verified.
-          <br />
-          <span className="text-sm text-muted-foreground">{getStatusMessage()}</span>
+          Position yourself in the frame. AI will verify the image.
         </CardDescription>
       </CardHeader>
+
       <CardContent className="space-y-4">
-        {isProxyDetected && !isVerifying && initializationStep === "complete" && (
-            <Alert variant="destructive">
-              <AlertTriangle className="h-4 w-4" />
-              <AlertTitle>Potential Issue Detected</AlertTitle>
-              <AlertDescription>
-                Please ensure no other screens are visible. The final snapshot will be verified.
-              </AlertDescription>
-            </Alert>
+        {isProxyDetected && isReady && (
+          <Alert variant="destructive">
+            <AlertTriangle className="h-4 w-4" />
+            <AlertTitle>Phone Detected</AlertTitle>
+            <AlertDescription>
+              Please remove any visible phones or screens from the frame.
+            </AlertDescription>
+          </Alert>
         )}
-        <div className="relative aspect-video w-full overflow-hidden rounded-lg border-2 border-dashed bg-muted">
-            <video
-                ref={videoRef}
-                className={`h-full w-full object-cover scale-x-[-1] transition-opacity duration-500 ${
-                  cameraStatus === 'ready' && initializationStep !== "camera" ? 'opacity-100' : 'opacity-0'
-                }`}
-                autoPlay
-                muted
-                playsInline
-            />
-            <canvas ref={canvasRef} className="hidden" />
-            {renderOverlay()}
+
+        <div className="relative aspect-video w-full bg-gray-100 rounded-lg overflow-hidden border">
+          <video
+            ref={videoRef}
+            className={`w-full h-full object-cover scale-x-[-1] transition-opacity duration-300 ${
+              isReady ? 'opacity-100' : 'opacity-0'
+            }`}
+            autoPlay
+            muted
+            playsInline
+          />
+          <canvas ref={canvasRef} className="hidden" />
+          {renderContent()}
         </div>
+
         <Button
-            onClick={handleCapture}
-            disabled={isButtonDisabled}
-            className="w-full py-6 text-lg font-semibold transition-all hover:scale-105 active:scale-100"
+          onClick={captureSnapshot}
+          disabled={isDisabled}
+          className="w-full py-3 font-semibold"
+          size="lg"
         >
-            {isVerifying ? (
-                <><Loader2 className="mr-2 animate-spin" /> Verifying...</>
-            ) : isButtonDisabled ? (
-                <><Loader2 className="mr-2 animate-spin" /> {getStatusMessage()}</>
-            ) : (
-                <><Camera className="mr-2" /> Take Snapshot & Submit</>
-            )}
+          {isVerifying ? (
+            <>
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              Verifying...
+            </>
+          ) : !isReady ? (
+            <>
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              Loading...
+            </>
+          ) : (
+            <>
+              <Camera className="mr-2 h-4 w-4" />
+              Capture & Submit
+            </>
+          )}
         </Button>
       </CardContent>
+
       <CardFooter>
         <Button 
-          variant="link" 
-          onClick={() => { playSound('click'); onBack(); }} 
+          variant="ghost" 
+          onClick={() => { playSound?.('click'); onBack(); }}
           disabled={isSubmitting || isVerifying}
         >
-          <ArrowLeft className="mr-2" />
-          Go Back
+          <ArrowLeft className="mr-2 h-4 w-4" />
+          Back
         </Button>
       </CardFooter>
     </>
