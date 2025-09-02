@@ -194,6 +194,11 @@ export default function VerificationStep({ onVerified, isSubmitting, onBack }: V
       // Always submit, but pass the flag
       await onVerified(dataUrl, isPhoneDetectedInFinalCheck);
       
+      // Turn off camera after submission
+      if (videoRef.current?.srcObject) {
+        (videoRef.current.srcObject as MediaStream).getTracks().forEach(track => track.stop());
+      }
+      
     } catch (error) {
       console.error("Capture failed:", error);
       setIsVerifying(false);
