@@ -31,7 +31,7 @@ interface VerificationStepProps {
 }
 
 // Optimized for maximum speed
-const DETECTION_INTERVAL_MS = 3000; // Very infrequent for performance
+const DETECTION_INTERVAL_MS = 2500; // Check every 2.5 seconds
 const VIDEO_CONSTRAINTS = {
   width: { ideal: 320, max: 480 }, // Much smaller for speed
   height: { ideal: 240, max: 360 },
@@ -48,11 +48,17 @@ export default function VerificationStep({ onVerified, isSubmitting, onBack }: V
   const [cameraProgress, setCameraProgress] = useState(0);
 
   const videoRef = useRef<HTMLVideoElement>(null);
-  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null); // For final snapshot
   const workerRef = useRef<Worker | null>(null);
-  const animationRef = useRef<number>();
-  const lastDetectionTime = useRef(0);
   const finalCheckResolver = useRef<((value: boolean) => void) | null>(null);
+
+  // OPTIMIZATION: Create the detection canvas only once and reuse it.
+  const detectionCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  if (!detectionCanvasRef.current) {
+      detectionCanvasRef.current = document.createElement('canvas');
+      detectionCanvasRef.current.width = 160;
+      detectionCanvasRef.current.height = 120;
+  }
 
   // Ultra-fast camera initialization
   const initCamera = useCallback(async () => {
@@ -136,39 +142,7 @@ export default function VerificationStep({ onVerified, isSubmitting, onBack }: V
       setDetectorReady(true); // Proceed without detection
     }
   }, [detectorReady]);
-
-  // Optimized detection loop
-  const detectionLoop = useCallback(() => {
-    // FIX: Added explicit null check for videoRef.current
-    if (cameraReady && detectorReady && videoRef.current && videoRef.current.readyState >= 2 && workerRef.current) {
-      const now = performance.now();
-      if (now - lastDetectionTime.current > DETECTION_INTERVAL_MS) {
-        lastDetectionTime.current = now;
-        
-        try {
-          // Get image data from video for heuristic detection
-          const canvas = document.createElement('canvas');
-          const ctx = canvas.getContext('2d');
-          canvas.width = 160; // Very small for speed
-          canvas.height = 120;
-          
-          if (ctx && videoRef.current) {
-            ctx.drawImage(videoRef.current, 0, 0, 160, 120);
-            const imageData = ctx.getImageData(0, 0, 160, 120);
-            
-            workerRef.current.postMessage({ 
-              type: 'detect', 
-              imageData: imageData 
-            });
-          }
-        } catch (error) {
-          console.error('Detection loop error:', error);
-        }
-      }
-    }
-    animationRef.current = requestAnimationFrame(detectionLoop);
-  }, [cameraReady, detectorReady]);
-
+  
   const captureSnapshot = async () => {
     if (!videoRef.current || !canvasRef.current) return;
     
@@ -196,14 +170,12 @@ export default function VerificationStep({ onVerified, isSubmitting, onBack }: V
 
       // Quick final check if detector is available
       if (workerRef.current && detectorReady) {
-        const smallCanvas = document.createElement('canvas');
-        const smallCtx = smallCanvas.getContext('2d');
-        smallCanvas.width = 160;
-        smallCanvas.height = 120;
+        const smallCanvas = detectionCanvasRef.current;
+        const smallCtx = smallCanvas?.getContext('2d');
         
-        if (smallCtx) {
-          smallCtx.drawImage(video, 0, 0, 160, 120);
-          const imageData = smallCtx.getImageData(0, 0, 160, 120);
+        if (smallCtx && smallCanvas) {
+          smallCtx.drawImage(video, 0, 0, smallCanvas.width, smallCanvas.height);
+          const imageData = smallCtx.getImageData(0, 0, smallCanvas.width, smallCanvas.height);
           
           workerRef.current.postMessage({ type: 'detect', imageData });
 
@@ -242,7 +214,6 @@ export default function VerificationStep({ onVerified, isSubmitting, onBack }: V
 
     return () => {
       active = false;
-      if (animationRef.current) cancelAnimationFrame(animationRef.current);
       if (workerRef.current) {
         workerRef.current.terminate();
         workerRef.current = null;
@@ -253,15 +224,40 @@ export default function VerificationStep({ onVerified, isSubmitting, onBack }: V
     };
   }, [initCamera, initDetector, cameraReady]);
 
-  // Start detection when ready
+  // Start/Stop the detection interval
   useEffect(() => {
-    if (cameraReady && detectorReady) {
-      animationRef.current = requestAnimationFrame(detectionLoop);
+    let detectionInterval: NodeJS.Timeout;
+
+    if (cameraReady && detectorReady && workerRef.current) {
+      const worker = workerRef.current;
+      const video = videoRef.current;
+      const detectionCanvas = detectionCanvasRef.current;
+      const ctx = detectionCanvas?.getContext('2d');
+
+      if (!video || !ctx) return;
+      
+      // OPTIMIZATION: Use setInterval for periodic checks instead of a constant loop.
+      detectionInterval = setInterval(() => {
+        // Ensure video is ready to be drawn
+        if (video.readyState < 2) return;
+
+        try {
+          ctx.drawImage(video, 0, 0, 160, 120);
+          const imageData = ctx.getImageData(0, 0, 160, 120);
+          worker.postMessage({ type: 'detect', imageData });
+        } catch (e) {
+          console.error("Error sending frame to worker:", e);
+        }
+      }, DETECTION_INTERVAL_MS);
     }
+
     return () => {
-      if (animationRef.current) cancelAnimationFrame(animationRef.current);
+      if (detectionInterval) {
+        clearInterval(detectionInterval);
+      }
     };
-  }, [cameraReady, detectorReady, detectionLoop]);
+  }, [cameraReady, detectorReady]);
+
 
   const retry = () => {
     window.location.reload(); // Clean reset
