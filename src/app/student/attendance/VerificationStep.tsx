@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { useState, useRef, useEffect, useCallback } from "react";
@@ -303,7 +304,7 @@ export default function VerificationStep({ onVerified, isSubmitting, onBack }: V
         <CardTitle className="text-3xl font-bold">Take a Snapshot</CardTitle>
         <CardDescription>
           Position yourself in the frame. AI will verify the image.
-        </Description>
+        </CardDescription>
       </CardHeader>
 
       <CardContent className="space-y-4">
