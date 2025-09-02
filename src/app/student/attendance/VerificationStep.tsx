@@ -1,3 +1,5 @@
+"use client";
+
 import React, { useState, useRef, useEffect, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import {
@@ -56,6 +58,7 @@ export default function VerificationStep({ onVerified, isSubmitting, onBack }: V
     try {
       setCameraProgress(10);
       
+      // Request camera with timeout
       const stream = await Promise.race([
         navigator.mediaDevices.getUserMedia({ video: VIDEO_CONSTRAINTS }),
         new Promise<MediaStream>((_, reject) => 
@@ -68,6 +71,7 @@ export default function VerificationStep({ onVerified, isSubmitting, onBack }: V
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
         
+        // Fast video ready detection
         const playPromise = new Promise<void>((resolve, reject) => {
           const timeout = setTimeout(() => reject(new Error('Video timeout')), 5000);
           
@@ -115,32 +119,36 @@ export default function VerificationStep({ onVerified, isSubmitting, onBack }: V
         setError('Worker script failed to load');
       };
 
+      // Initialize immediately
       workerRef.current.postMessage({ type: 'init' });
       
+      // Fallback timeout
       setTimeout(() => {
         if (!detectorReady) {
-          setDetectorReady(true);
+          setDetectorReady(true); // Allow capture without detection as fallback
           console.warn('Detector timeout - proceeding without detection');
         }
       }, 5000);
       
-    } catch (err) {
+    } catch (err: any) {
       console.error('Detector init failed:', err);
-      setDetectorReady(true);
+      setDetectorReady(true); // Proceed without detection
     }
   }, [detectorReady]);
 
   // Optimized detection loop
   const detectionLoop = useCallback(() => {
-    if (cameraReady && detectorReady && videoRef.current?.readyState >= 2 && workerRef.current) {
+    // FIX: Added explicit null check for videoRef.current
+    if (cameraReady && detectorReady && videoRef.current && videoRef.current.readyState >= 2 && workerRef.current) {
       const now = performance.now();
       if (now - lastDetectionTime.current > DETECTION_INTERVAL_MS) {
         lastDetectionTime.current = now;
         
         try {
+          // Get image data from video for heuristic detection
           const canvas = document.createElement('canvas');
           const ctx = canvas.getContext('2d');
-          canvas.width = 160;
+          canvas.width = 160; // Very small for speed
           canvas.height = 120;
           
           if (ctx && videoRef.current) {
@@ -170,6 +178,7 @@ export default function VerificationStep({ onVerified, isSubmitting, onBack }: V
       const video = videoRef.current;
       const canvas = canvasRef.current;
       
+      // High quality capture
       canvas.width = video.videoWidth || 640;
       canvas.height = video.videoHeight || 480;
 
@@ -183,6 +192,7 @@ export default function VerificationStep({ onVerified, isSubmitting, onBack }: V
 
       const dataUrl = canvas.toDataURL("image/jpeg", 0.8);
 
+      // Quick final check if detector is available
       if (workerRef.current && detectorReady) {
         const smallCanvas = document.createElement('canvas');
         const smallCtx = smallCanvas.getContext('2d');
@@ -202,7 +212,7 @@ export default function VerificationStep({ onVerified, isSubmitting, onBack }: V
                 finalCheckResolver.current = null;
                 resolve(false);
               }
-            }, 2000);
+            }, 2000); // Quick timeout
           });
 
           if (isPhoneDetected) {
@@ -221,11 +231,12 @@ export default function VerificationStep({ onVerified, isSubmitting, onBack }: V
     }
   };
 
+  // Initialize everything
   useEffect(() => {
     let active = true;
     const init = async () => {
       await initCamera();
-      if (active && cameraReady) {
+      if(active && cameraReady) {
         await initDetector();
       }
     };
@@ -245,6 +256,7 @@ export default function VerificationStep({ onVerified, isSubmitting, onBack }: V
     };
   }, [initCamera, initDetector, cameraReady]);
 
+  // Start detection when ready
   useEffect(() => {
     if (cameraReady && detectorReady) {
       animationRef.current = requestAnimationFrame(detectionLoop);
@@ -255,7 +267,7 @@ export default function VerificationStep({ onVerified, isSubmitting, onBack }: V
   }, [cameraReady, detectorReady, detectionLoop]);
 
   const retry = () => {
-    window.location.reload();
+    window.location.reload(); // Clean reset
   };
 
   const isReady = cameraReady && detectorReady;
@@ -291,7 +303,7 @@ export default function VerificationStep({ onVerified, isSubmitting, onBack }: V
         <CardTitle className="text-3xl font-bold">Take a Snapshot</CardTitle>
         <CardDescription>
           Position yourself in the frame. AI will verify the image.
-        </CardDescription>
+        </Description>
       </CardHeader>
 
       <CardContent className="space-y-4">
