@@ -16,8 +16,13 @@ import {
   AlertTitle,
   AlertDescription,
 } from "@/components/ui/alert";
-import { Loader2, AlertTriangle, Camera, ArrowLeft, CheckCircle } from "lucide-react";
+import { Loader2, AlertTriangle, ArrowLeft } from "lucide-react";
 import { playSound } from "@/lib/utils";
+
+interface DeviceDetection {
+  type: string;
+  confidence: number;
+}
 
 interface VerificationStepProps {
   onVerified: (snapshot: string, proxyDetected: boolean) => Promise<void>;
@@ -25,26 +30,22 @@ interface VerificationStepProps {
   onBack: () => void;
 }
 
-interface DeviceDetection {
-  type: string;
-  confidence: number;
-  area: number;
-}
-
 export default function VerificationStep({ onVerified, isSubmitting, onBack }: VerificationStepProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
-  const canvasRef = useRef<HTMLCanvasElement>(null); // For final snapshot
   const workerRef = useRef<Worker | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  const detectionLoopRef = useRef<number>();
   
-  // State management
+  const detectionBuffer = useRef({ positives: 0, negatives: 0 });
+
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [detectorReady, setDetectorReady] = useState(false);
   const [cameraReady, setCameraReady] = useState(false);
-  const [isVerifying, setIsVerifying] = useState(false);
-  const [isProxyDetected, setIsProxyDetected] = useState(false);
+  const [detectedDevices, setDetectedDevices] = useState<DeviceDetection[]>([]);
+  const [isProxyVisible, setIsProxyVisible] = useState(false);
   const [systemInfo, setSystemInfo] = useState<any>(null);
+
 
   const stopCameraStream = useCallback(() => {
     if (streamRef.current) {
@@ -57,9 +58,12 @@ export default function VerificationStep({ onVerified, isSubmitting, onBack }: V
     if (videoRef.current) {
         videoRef.current.srcObject = null;
     }
+    if (detectionLoopRef.current) {
+      cancelAnimationFrame(detectionLoopRef.current);
+      detectionLoopRef.current = undefined;
+    }
   }, []);
 
-  // Enhanced camera initialization with better mobile support
   const initCamera = useCallback(async () => {
     try {
       const constraints: MediaStreamConstraints = {
@@ -77,16 +81,11 @@ export default function VerificationStep({ onVerified, isSubmitting, onBack }: V
 
       if (video) {
         streamRef.current = stream;
-
-        // FIX 1: Directly set crucial properties for autoplay reliability
         video.muted = true;
         video.playsInline = true;
         
-        // FIX 2: Use a Promise to wait for the 'canplay' event
         await new Promise<void>((resolve, reject) => {
           const timeout = setTimeout(() => reject(new Error('Camera loading timeout')), 10000);
-
-          // FIX 3: Use 'oncanplay' as it's a more reliable indicator for playback readiness
           video.oncanplay = () => {
             clearTimeout(timeout);
             video.play()
@@ -99,13 +98,10 @@ export default function VerificationStep({ onVerified, isSubmitting, onBack }: V
                 reject(err);
               });
           };
-
           video.onerror = () => {
              clearTimeout(timeout);
              reject(new Error('Video element encountered an error'));
           };
-          
-          // Attach the stream *after* setting up listeners
           video.srcObject = stream;
         });
       }
@@ -121,133 +117,60 @@ export default function VerificationStep({ onVerified, isSubmitting, onBack }: V
     }
   }, []);
 
-
   const initDetector = useCallback(async () => {
     try {
-      if (!window.Worker) throw new Error('Web Workers not supported.');
-
       workerRef.current = new Worker('/detection.worker.js');
       
-      workerRef.current.onmessage = (event) => {
-        const { type, isProxyDetected: detected, error: workerError, backend } = event.data;
+      const canvas = document.createElement('canvas');
+      canvas.width = 320;
+      canvas.height = 240;
+      const offscreenCanvas = canvas.transferControlToOffscreen();
+
+      const initPromise = new Promise<void>((resolve, reject) => {
+        const timeout = setTimeout(() => reject(new Error('AI initialization timeout')), 60000);
         
-        switch (type) {
-          case 'ready':
-            setDetectorReady(true);
+        workerRef.current!.onmessage = (event) => {
+          const { type, error: workerError, backend } = event.data;
+          if (type === 'ready') {
+            clearTimeout(timeout);
             setSystemInfo({ backend });
-            console.log(`🤖 AI Detector ready with ${backend} backend.`);
-            break;
-          case 'result':
-            setIsProxyDetected(detected);
-            break;
-          case 'error':
-            console.error('🚨 AI Worker error:', workerError);
-            if (workerError.includes('model')) {
-               setError("Failed to load the AI model. This might be a network issue. Please try refreshing.");
-            }
-            break;
-        }
-      };
-
-      workerRef.current.onerror = (e) => {
-        console.error('💥 Worker script error:', e);
-        setError('AI detection system failed to start. Please refresh the page.');
-        throw new Error('Worker script failed');
-      };
-
-      const readyPromise = new Promise<void>((resolve, reject) => {
-        const timeout = setTimeout(() => reject(new Error('AI initialization timeout.')), 20000);
-        
-        const onReady = (event: MessageEvent) => {
-          if (event.data.type === 'ready') {
-            clearTimeout(timeout);
-            workerRef.current?.removeEventListener('message', onReady);
+            setDetectorReady(true);
             resolve();
-          } else if (event.data.type === 'error') {
+          } else if (type === 'error') {
             clearTimeout(timeout);
-            workerRef.current?.removeEventListener('message', onReady);
-            reject(new Error(event.data.error));
+            reject(new Error(workerError));
           }
         };
-        workerRef.current?.addEventListener('message', onReady);
-      });
 
-      workerRef.current.postMessage({ type: 'init' });
-      await readyPromise;
-      
+        workerRef.current!.postMessage(
+          { type: 'init', payload: { canvas: offscreenCanvas } },
+          [offscreenCanvas]
+        );
+      });
+      await initPromise;
+
     } catch (err: any) {
       setError(`AI system failed: ${err.message}`);
       throw err;
     }
   }, []);
 
-  // Use setInterval for periodic checks
-  useEffect(() => {
-    let detectionInterval: NodeJS.Timeout | null = null;
-
-    if (cameraReady && detectorReady && workerRef.current) {
-        const worker = workerRef.current;
-        const video = videoRef.current;
-        const detectionCanvas = document.createElement('canvas');
-        detectionCanvas.width = 224;
-        detectionCanvas.height = 224;
-        const ctx = detectionCanvas.getContext('2d');
-
-        if (video && ctx) {
-            detectionInterval = setInterval(() => {
-                if (video.readyState < 2) return;
-                try {
-                    ctx.drawImage(video, 0, 0, 224, 224);
-                    const imageData = ctx.getImageData(0, 0, 224, 224);
-                    worker.postMessage({ type: 'detect', imageData }, [imageData.data.buffer]);
-                } catch (e) {
-                    console.error("Frame capture error for detection:", e);
-                }
-            }, 2000); // Check every 2 seconds
-        }
-    }
-
-    return () => {
-        if (detectionInterval) {
-            clearInterval(detectionInterval);
-        }
+  const startDetectionLoop = useCallback(() => {
+    const processFrame = async () => {
+      if (!videoRef.current || videoRef.current.readyState < 2 || !workerRef.current) {
+        detectionLoopRef.current = requestAnimationFrame(processFrame);
+        return;
+      }
+      try {
+        const bitmap = await createImageBitmap(videoRef.current);
+        workerRef.current?.postMessage({ type: 'detect', payload: { bitmap } }, [bitmap]);
+      } catch (e) {
+        console.error("Failed to create ImageBitmap.", e);
+        detectionLoopRef.current = requestAnimationFrame(processFrame);
+      }
     };
-  }, [cameraReady, detectorReady]);
-
-
-  const captureSnapshot = async () => {
-    if (!videoRef.current || !canvasRef.current || isVerifying || isSubmitting) return;
-
-    setIsVerifying(true);
-    playSound('capture');
-    
-    try {
-        const video = videoRef.current;
-        const canvas = canvasRef.current;
-        canvas.width = video.videoWidth;
-        canvas.height = video.videoHeight;
-        const ctx = canvas.getContext('2d');
-        if (ctx) {
-            ctx.translate(canvas.width, 0);
-            ctx.scale(-1, 1);
-            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-        }
-        const snapshot = canvas.toDataURL('image/jpeg', 0.8);
-        
-        await onVerified(snapshot, isProxyDetected);
-
-    } catch (e) {
-        console.error("Snapshot failed:", e);
-        setError("Could not capture image. Please try again.");
-    } finally {
-        setIsVerifying(false);
-        stopCameraStream();
-    }
-  };
-
-  const handleRetry = () => {
-    window.location.reload();
-  };
+    detectionLoopRef.current = requestAnimationFrame(processFrame);
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -270,26 +193,78 @@ export default function VerificationStep({ onVerified, isSubmitting, onBack }: V
         }
     };
   }, [initCamera, initDetector, stopCameraStream]);
-  
-  if (error) {
-    const isTimeoutError = error.includes('timeout');
-    const isConnectionError = error.includes('network');
+
+
+  useEffect(() => {
+    if (cameraReady && detectorReady) {
+      startDetectionLoop();
+    }
     
+    if (workerRef.current) {
+      workerRef.current.onmessage = (event) => {
+        const { type, devices } = event.data;
+        if (type === 'result') {
+          if (devices && devices.length > 0) {
+            detectionBuffer.current.positives++;
+            detectionBuffer.current.negatives = 0;
+          } else {
+            detectionBuffer.current.negatives++;
+            detectionBuffer.current.positives = 0;
+          }
+          if (detectionBuffer.current.positives >= 2) {
+            setIsProxyVisible(true);
+            setDetectedDevices(devices);
+          }
+          if (detectionBuffer.current.negatives >= 5) {
+            setIsProxyVisible(false);
+          }
+          detectionLoopRef.current = requestAnimationFrame(startDetectionLoop);
+        } else if (type === 'ready') {
+            setDetectorReady(true);
+            setSystemInfo({ backend: event.data.backend });
+        }
+      };
+    }
+    
+    return () => {
+      if (detectionLoopRef.current) {
+        cancelAnimationFrame(detectionLoopRef.current);
+      }
+    };
+  }, [cameraReady, detectorReady, startDetectionLoop]);
+
+
+  const captureSnapshot = async () => {
+    if (!videoRef.current || isSubmitting) return;
+
+    playSound('capture');
+    
+    const finalProxyCheck = isProxyVisible;
+    
+    const canvas = document.createElement('canvas');
+    const video = videoRef.current;
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    const ctx = canvas.getContext('2d');
+    if (ctx) {
+        ctx.translate(canvas.width, 0);
+        ctx.scale(-1, 1);
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    }
+    const snapshot = canvas.toDataURL('image/jpeg', 0.8);
+    
+    await onVerified(snapshot, finalProxyCheck);
+    stopCameraStream();
+  };
+
+  const handleRetry = () => { window.location.reload(); };
+
+  if (error) {
     return (
       <div className="flex flex-col items-center p-6 text-center max-w-lg mx-auto">
         <div className="text-red-600 mb-6 p-4 bg-red-50 rounded-lg border border-red-200 w-full">
-          <div className="text-lg font-semibold mb-2">
-            {isTimeoutError ? '⏱️ Loading Timeout' : isConnectionError ? '🌐 Connection Issue' : '⚠️ System Error'}
-          </div>
+          <div className="text-lg font-semibold mb-2">⚠️ System Error</div>
           <div className="text-sm mb-4">{error}</div>
-          <div className="text-xs text-gray-600 bg-gray-50 p-3 rounded border-t">
-            <div className="font-medium mb-1">💡 Try these solutions:</div>
-            <ul className="text-left space-y-1 list-disc list-inside">
-              <li>Check your internet connection</li>
-              <li>Refresh the page</li>
-              <li>Try a different browser or device</li>
-            </ul>
-          </div>
         </div>
         <div className="flex flex-col gap-3 w-full max-w-sm">
           <button onClick={handleRetry} className="w-full px-4 py-3 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors">
@@ -312,12 +287,12 @@ export default function VerificationStep({ onVerified, isSubmitting, onBack }: V
         </CardDescription>
       </CardHeader>
       <CardContent>
-        {isProxyDetected && !isLoading && (
+        {isProxyVisible && !isLoading && (
             <Alert variant="destructive" className="mb-4">
                 <AlertTriangle className="h-4 w-4" />
                 <AlertTitle>Proxy Device Detected</AlertTitle>
                 <AlertDescription>
-                A phone or other device was detected. Your submission will be flagged for review.
+                 {detectedDevices.map(d => d.type).join(', ')} detected. Your submission will be flagged.
                 </AlertDescription>
             </Alert>
         )}
@@ -329,7 +304,6 @@ export default function VerificationStep({ onVerified, isSubmitting, onBack }: V
             playsInline
             muted
           />
-          <canvas ref={canvasRef} className="hidden" />
           {isLoading && (
             <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 bg-background/80 backdrop-blur-sm rounded-lg">
               <Loader2 className="h-10 w-10 animate-spin text-primary" />
@@ -347,12 +321,11 @@ export default function VerificationStep({ onVerified, isSubmitting, onBack }: V
       <CardFooter className="flex-col gap-4">
         <Button
           onClick={captureSnapshot}
-          disabled={isLoading || isVerifying || isSubmitting}
+          disabled={isLoading || isSubmitting}
           className="w-full py-3 font-semibold"
           size="lg"
         >
           {isLoading ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Preparing...</> :
-           isVerifying ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Verifying...</> :
            isSubmitting ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Submitting...</> :
            'Capture & Submit'
           }
@@ -360,7 +333,7 @@ export default function VerificationStep({ onVerified, isSubmitting, onBack }: V
         <Button 
           variant="ghost" 
           onClick={onBack}
-          disabled={isSubmitting || isVerifying}
+          disabled={isSubmitting}
           className="w-full"
         >
           <ArrowLeft className="mr-2 h-4 w-4" />
