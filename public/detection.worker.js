@@ -1,121 +1,133 @@
-// public/detection.worker.js
+// public/detection.worker.js - Industry-Grade Mobile Detection Worker
 
-importScripts("https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@3.11.0/dist/tf.min.js");
-importScripts("https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd@2.2.2/dist/coco-ssd.min.js");
+// Try to import scripts with error handling
+try {
+  importScripts("https://cdn.jsdelivr.net/npm/@tensorflow/tfjs/dist/tf.min.js");
+  importScripts("https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd/dist/coco-ssd.min.js");
+} catch (e) {
+  console.error("Failed to load TensorFlow.js scripts", e);
+  self.postMessage({ type: 'error', error: 'Could not load core AI libraries.' });
+}
 
 let model = null;
-let isDetecting = false; // OPTIMIZATION: Flag to prevent detection backlog
+let isDetecting = false;
+let frameCounter = 0;
+const FRAME_SKIP = 2; // Process 1 in every 3 frames
+
+const PROXY_DEVICES = {
+  'cell phone': 0.35,
+  'laptop': 0.4,
+  'tablet': 0.4, // Custom alias for detection
+  'tv': 0.5,
+  'remote': 0.3,
+  'mouse': 0.3,
+  'keyboard': 0.3
+};
 
 async function loadModel() {
-  if (model) return;
+  if (model) return { success: true, backend: tf.getBackend() };
 
-  try {
-    // OPTIMIZATION: Set the backend to WebGL for GPU acceleration
-    await tf.setBackend('webgl');
-    await tf.ready();
-    
-    // OPTIMIZATION: Load the 'lite_mobilenet_v2' model - smaller and faster
-    model = await cocoSsd.load({ 
-      base: 'lite_mobilenet_v2'
-    });
-    
-    console.log('AI model loaded successfully with WebGL backend');
-  } catch (error) {
-    console.error('Failed to load model:', error);
-    // Fallback to CPU if WebGL fails
+  const backends = ['webgl', 'cpu'];
+  for (const backend of backends) {
     try {
-      await tf.setBackend('cpu');
-      model = await cocoSsd.load({ 
-        base: 'lite_mobilenet_v2'
-      });
-      console.log('AI model loaded with CPU backend (fallback)');
-    } catch (fallbackError) {
-      console.error('Complete model loading failure:', fallbackError);
-      throw fallbackError;
+      await tf.setBackend(backend);
+      await tf.ready();
+      
+      model = await cocoSsd.load({ base: 'lite_mobilenet_v2' });
+      
+      // Warm-up the model
+      const warmUpTensor = tf.zeros([224, 224, 3], 'int32');
+      await model.detect(warmUpTensor);
+      warmUpTensor.dispose();
+      
+      console.log(`🤖 AI Model loaded successfully with ${backend} backend.`);
+      return { success: true, backend };
+
+    } catch (error) {
+      console.warn(`Failed to initialize with ${backend} backend:`, error.message);
     }
   }
+  
+  return { success: false, backend: null };
 }
 
 self.onmessage = async (event) => {
-  const { type, frame } = event.data;
+  const { type, imageData, frameNumber } = event.data;
 
-  if (type === 'init') {
-    try {
-      await loadModel();
-      self.postMessage({ type: 'ready' });
-    } catch (error) {
-      self.postMessage({ 
-        type: 'error', 
-        error: "Failed to load AI model. Please refresh and try again." 
-      });
-    }
-    return;
-  }
-
-  if (type === 'detect') {
-    // OPTIMIZATION: If the model is busy or not ready, skip this frame
-    if (!model || !frame || isDetecting) {
-      return;
-    }
-
-    isDetecting = true; // Lock detection to prevent backlog
-    
-    try {
-      // Create tensor from image data
-      const tensor = tf.browser.fromPixels(frame);
-      
-      // Run detection
-      const predictions = await model.detect(tensor);
-      
-      // Clean up tensor immediately to prevent memory leaks
-      tensor.dispose();
-
-      // Check for proxy devices (phones, tablets, laptops, etc.)
-      const proxyDevices = [
-        'cell phone',
-        'laptop', 
-        'tablet',
-        'computer',
-        'monitor',
-        'tv',
-        'remote'
-      ];
-      
-      const isProxyDetected = predictions.some(prediction => {
-        const isProxyDevice = proxyDevices.includes(prediction.class.toLowerCase());
-        const hasHighConfidence = prediction.score > 0.45; // Slightly lower threshold for better detection
-        
-        if (isProxyDevice && hasHighConfidence) {
-          console.log(`Detected ${prediction.class} with confidence ${(prediction.score * 100).toFixed(1)}%`);
+  switch (type) {
+    case 'init':
+      try {
+        const { success, backend } = await loadModel();
+        if (success) {
+          const memory = tf.memory();
+          self.postMessage({ type: 'ready', backend, memory });
+        } else {
+          throw new Error('All backend initializations failed.');
         }
-        
-        return isProxyDevice && hasHighConfidence;
-      });
-      
-      self.postMessage({ 
-        type: 'result', 
-        isProxyDetected,
-        detections: predictions.length // For debugging
-      });
+      } catch (error) {
+        self.postMessage({ type: 'error', error: "Failed to load AI model. Your browser might not be supported." });
+      }
+      break;
 
-    } catch (error) {
-      console.error('AI detection failed:', error);
-      // Fail safe - assume no proxy detected in case of error
-      self.postMessage({ 
-        type: 'result', 
-        isProxyDetected: false 
-      });
-    } finally {
-      isDetecting = false; // Unlock detection for the next frame
-    }
+    case 'detect':
+      frameCounter++;
+      if (!model || isDetecting || (frameCounter % (FRAME_SKIP + 1)) !== 0) {
+        return;
+      }
+
+      isDetecting = true;
+      let tensor = null;
+      try {
+        const detectionStartTime = performance.now();
+        
+        tensor = tf.browser.fromPixels(imageData);
+        
+        const predictions = await model.detect(tensor);
+        
+        const detectionTime = performance.now() - detectionStartTime;
+        if (detectionTime > 2000) {
+          console.warn(`Slow detection: ${detectionTime.toFixed(0)}ms`);
+        }
+
+        const detectedDevices = predictions
+          .map(p => ({
+            ...p,
+            type: p.class.toLowerCase().replace(' ', '')
+          }))
+          .filter(p => PROXY_DEVICES[p.class] && p.score >= PROXY_DEVICES[p.class])
+          .map(p => ({
+            type: p.class,
+            confidence: p.score,
+            area: p.bbox[2] * p.bbox[3]
+          }));
+
+        self.postMessage({
+          type: 'result',
+          isProxyDetected: detectedDevices.length > 0,
+          deviceCount: detectedDevices.length,
+          devices: detectedDevices,
+        });
+
+      } catch (error) {
+        console.error('AI detection failed:', error);
+        self.postMessage({ type: 'result', isProxyDetected: false, deviceCount: 0, devices: [] });
+      } finally {
+        if (tensor) tensor.dispose();
+        isDetecting = false;
+      }
+      break;
+
+    case 'cleanup':
+      if (model && model.dispose) {
+        model.dispose();
+      }
+      model = null;
+      console.log("Worker cleaned up.");
+      break;
   }
 };
 
-// Handle worker errors
 self.onerror = (error) => {
-  console.error('Worker error:', error);
-  self.postMessage({ 
-    type: 'error', 
-    error: 'AI detection worker encountered an error' 
-  });
+  console.error('Unhandled worker error:', error);
+  self.postMessage({ type: 'error', error: 'A critical worker error occurred.' });
 };

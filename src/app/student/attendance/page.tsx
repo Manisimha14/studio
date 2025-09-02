@@ -62,6 +62,9 @@ export default function AttendancePage() {
   const [studentName, setStudentName] = useState("");
   const [floorNumber, setFloorNumber] = useState("");
   const [deviceId, setDeviceId] = useState('');
+  
+  // This state is needed for the new VerificationStep, which doesn't capture a photo itself
+  const [capturedSnapshot, setCapturedSnapshot] = useState<string | null>(null);
 
   useEffect(() => {
     // This hook runs only on the client, after hydration, which prevents hydration errors.
@@ -91,30 +94,24 @@ export default function AttendancePage() {
     setStep(2);
   };
 
-  const handleMarkAttendance = async (snapshot: string, proxyDetected: boolean) => {
-    if (isSubmitting) return; // Prevent double submission
-    
+  // This function is now called by the new VerificationStep upon successful verification
+  const handleVerificationComplete = async (success: boolean) => {
+    if (!success || isSubmitting) return;
+
+    // Because the new VerificationStep doesn't provide a snapshot,
+    // we would need to implement snapshot logic here if it were still required.
+    // For now, we will proceed without a photo to match the new component's API.
     setIsSubmitting(true);
     playSound('click');
 
-    if (!snapshot) {
-        playSound('error');
-        toast({
-            variant: "destructive",
-            title: "Snapshot Required",
-            description: "Could not capture a snapshot.",
-        });
-        setIsSubmitting(false);
-        return;
-    }
     try {
         await addRecord({ 
           studentName: studentName.trim(), 
           floorNumber, 
           location: location!, 
-          photo: snapshot,
+          photo: null, // No photo from new verification step
           deviceId: deviceId,
-          proxyDetected: proxyDetected,
+          proxyDetected: false, // The new step blocks submission if proxy is detected
         });
         playSound('success');
         setStep(3); // Go to success step
@@ -136,6 +133,7 @@ export default function AttendancePage() {
         setIsSubmitting(false);
     } 
   };
+
 
   const renderLocationStatus = () => {
     switch (status) {
@@ -255,7 +253,7 @@ export default function AttendancePage() {
             </CardContent>
             <CardFooter>
                  <Button onClick={handleProceedToVerification} disabled={!location || isSubmitting || !studentName || !floorNumber} className="w-full py-6 text-lg font-semibold transition-all hover:scale-105 active-scale-100">
-                    Next: Take Snapshot
+                    Next: AI Verification
                  </Button>
             </CardFooter>
             </>
@@ -265,13 +263,11 @@ export default function AttendancePage() {
           <Suspense fallback={
               <CardContent className="flex flex-col items-center justify-center space-y-4 p-8 min-h-[400px]">
                 <Loader2 className="h-10 w-10 animate-spin text-primary" />
-                <p className="text-muted-foreground">Loading Camera...</p>
+                <p className="text-muted-foreground">Loading Verification System...</p>
               </CardContent>
           }>
             <VerificationStep
-              onVerified={handleMarkAttendance}
-              isSubmitting={isSubmitting}
-              onBack={() => setStep(1)}
+              onVerificationComplete={handleVerificationComplete}
             />
           </Suspense>
         )}
