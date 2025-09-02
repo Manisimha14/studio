@@ -218,13 +218,14 @@ export default function VerificationStep({ onVerified, isSubmitting, onBack }: V
 
           if (isPhoneDetected) {
             playSound?.('error');
-            setIsProxyDetected(true);
+            setIsProxyDetected(true); // Show the warning
             setIsVerifying(false);
-            return;
+            return; // Stop the submission
           }
         }
       }
 
+      // If checks pass, call the onVerified prop to submit the attendance
       await onVerified(dataUrl);
       
     } catch (error) {
@@ -408,3 +409,5 @@ export default function VerificationStep({ onVerified, isSubmitting, onBack }: V
     </>
   );
 }
+
+  
