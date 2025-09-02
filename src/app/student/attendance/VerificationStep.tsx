@@ -1,6 +1,22 @@
 // src/app/student/attendance/VerificationStep.tsx
 
 import { useEffect, useRef, useState, useCallback } from 'react';
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import {
+  Alert,
+  AlertTitle,
+  AlertDescription,
+} from "@/components/ui/alert";
+import { Loader2, AlertTriangle, Camera, ArrowLeft, CheckCircle } from "lucide-react";
+import { playSound } from "@/lib/utils";
 
 interface VerificationStepProps {
   onVerified: (snapshot: string, proxyDetected: boolean) => Promise<void>;
@@ -16,16 +32,16 @@ interface DeviceDetection {
 
 export default function VerificationStep({ onVerified, isSubmitting, onBack }: VerificationStepProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
-  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null); // For final snapshot
   const workerRef = useRef<Worker | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
-  const detectionIntervalRef = useRef<NodeJS.Timeout | null>(null);
   
   // State management
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [detectorReady, setDetectorReady] = useState(false);
   const [cameraReady, setCameraReady] = useState(false);
+  const [isVerifying, setIsVerifying] = useState(false);
   const [isProxyDetected, setIsProxyDetected] = useState(false);
   const [systemInfo, setSystemInfo] = useState<any>(null);
 
@@ -140,29 +156,37 @@ export default function VerificationStep({ onVerified, isSubmitting, onBack }: V
     }
   }, []);
 
-  const startDetection = useCallback(() => {
-    if (!cameraReady || !detectorReady || !workerRef.current || !videoRef.current) return;
-    
-    const worker = workerRef.current;
-    const video = videoRef.current;
-    const detectionCanvas = document.createElement('canvas');
-    detectionCanvas.width = 224;
-    detectionCanvas.height = 224;
-    const ctx = detectionCanvas.getContext('2d', { willReadFrequently: true });
-    if (!ctx) return;
+  // Use setInterval for periodic checks
+  useEffect(() => {
+    let detectionInterval: NodeJS.Timeout | null = null;
 
-    const detectionInterval = setInterval(() => {
-      if (video.readyState < 2 || video.paused) return;
-      try {
-        ctx.drawImage(video, 0, 0, 224, 224);
-        const imageData = ctx.getImageData(0, 0, 224, 224);
-        worker.postMessage({ type: 'detect', imageData }, [imageData.data.buffer]);
-      } catch (e) {
-        console.error("Frame capture error for detection:", e);
-      }
-    }, 2000);
+    if (cameraReady && detectorReady && workerRef.current) {
+        const worker = workerRef.current;
+        const video = videoRef.current;
+        const detectionCanvas = document.createElement('canvas');
+        detectionCanvas.width = 224;
+        detectionCanvas.height = 224;
+        const ctx = detectionCanvas.getContext('2d');
 
-    detectionIntervalRef.current = detectionInterval;
+        if (video && ctx) {
+            detectionInterval = setInterval(() => {
+                if (video.readyState < 2) return;
+                try {
+                    ctx.drawImage(video, 0, 0, 224, 224);
+                    const imageData = ctx.getImageData(0, 0, 224, 224);
+                    worker.postMessage({ type: 'detect', imageData }, [imageData.data.buffer]);
+                } catch (e) {
+                    console.error("Frame capture error for detection:", e);
+                }
+            }, 2000); // Check every 2 seconds
+        }
+    }
+
+    return () => {
+        if (detectionInterval) {
+            clearInterval(detectionInterval);
+        }
+    };
   }, [cameraReady, detectorReady]);
 
 
@@ -170,6 +194,7 @@ export default function VerificationStep({ onVerified, isSubmitting, onBack }: V
     if (!videoRef.current || !canvasRef.current || isVerifying || isSubmitting) return;
 
     setIsVerifying(true);
+    playSound('capture');
     
     try {
         const video = videoRef.current;
@@ -212,29 +237,15 @@ export default function VerificationStep({ onVerified, isSubmitting, onBack }: V
       }
     };
     init();
-    return () => { active = false; };
-  }, [initCamera, initDetector]);
-
-  useEffect(() => {
-    if (cameraReady && detectorReady) {
-      startDetection();
-    }
-    return () => {
-      if (detectionIntervalRef.current) {
-        clearInterval(detectionIntervalRef.current);
-      }
-    };
-  }, [cameraReady, detectorReady, startDetection]);
-  
-  useEffect(() => {
-    return () => {
+    return () => { 
+        active = false; 
         stopCameraStream();
         if (workerRef.current) {
             workerRef.current.terminate();
         }
-    }
-  }, [stopCameraStream]);
-
+    };
+  }, [initCamera, initDetector, stopCameraStream]);
+  
   if (error) {
     const isTimeoutError = error.includes('timeout');
     const isConnectionError = error.includes('network');
